@@ -16,6 +16,8 @@ python -m unittest tests.test_benchmarks -v
 
 请替换为自己环境的 Python 路径。公开原始结果是 [baseline-2026-10-18.json](../benchmarks/results/baseline-2026-10-18.json)，其中环境信息和每次样本的原始时间为准。换机器应重新执行。仅当环境已经安装 sse-starlette 时才运行可选编码比较；默认 core/HTTP 基准只需要标准库和已安装的核心包。
 
+canonical JSON 是不可变[源码提交 `7248096`](https://github.com/0RAJA/ui-stream/tree/72480966c9bb154362b2a378ec24eab633205f7b) 对应的历史 macOS 测量。保留原始字节及当时源码摘要；之后的 Linux worker allocator 策略会改变当前 harness，重新运行会记录当前源码指纹，不覆盖或重标这份历史基线。不能由 macOS 结果声称已有 Linux 性能实测。
+
 ## 负载与边界
 
 | 层次 | 负载 | 持久化 | 对照 |
@@ -46,6 +48,8 @@ HTTP fixture 复用 `demos.sqlite` 的真实 HTTP handler、MemoryChannel 和 SQ
 默认每组重复三次，每个样本新建子进程，重复之间交替正序/逆序，不单独预热；首操作是冷启动状态，后续事件自然热身。无逐事件 sleep 或生产者节奏控制，有限突发用于暴露排队。
 
 输入硬上限：core/编码 1,000 条、HTTP 256 条、8 个读取连接、正文 4,096 字节、3 档连接数、3 次重复。每个 worker 最长 30 秒墙钟、15 秒 CPU、128 个文件描述符；Linux 另限地址空间 512 MiB。suite 120 秒后停止调度。macOS 没有施加不可靠的可移植地址空间限制，由负载、读取者与 channel 容量在结构上约束内存。smoke 为 16 个 core/HTTP 事件、1 个连接、2 次重复。测试验证协议、结果和上限，不设机器速度阈值。
+
+Linux 下，suite 和协议测试共用 launcher，在 **Python 子解释器启动前** 将复制的子进程环境设为 `MALLOC_ARENA_MAX=2`，约束 glibc allocator arena 预留，避免多个 arena 仅因地址空间预留就挤占 512 MiB 预算。保留原 512 MiB 上限和 1/4/8 读者覆盖，不修改父进程环境，见 [GNU libc arena 配置说明](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)。新 worker 结果通过 `worker_limits` 记录实际 CPU/FD/地址空间限制与 allocator 环境；历史 macOS JSON 生成于此字段加入之前。
 
 只使用合成数据与 loopback，临时数据库自动删除。公开 JSON 记录硬件、OS、Python、依赖版本和相对源码 AST 摘要（忽略格式与注释），不包含主机名、用户名、解释器绝对位置或本机路径。
 

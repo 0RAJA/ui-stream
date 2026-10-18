@@ -425,6 +425,14 @@ def execute_case(config, layer, implementation, persistence, connections):
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         result["peak_rss_bytes"] = int(rss if sys.platform == "darwin" else rss * 1024)
         result["database_bytes"] = sum(path.stat().st_size for path in directory.glob("benchmark.sqlite3*"))
+        result["worker_limits"] = {
+            "cpu_seconds": resource.getrlimit(resource.RLIMIT_CPU)[0],
+            "file_descriptors": resource.getrlimit(resource.RLIMIT_NOFILE)[0],
+            "address_space_bytes": resource.getrlimit(resource.RLIMIT_AS)[0]
+            if sys.platform.startswith("linux")
+            else None,
+            "malloc_arena_max": os.environ.get("MALLOC_ARENA_MAX"),
+        }
     return result
 
 
@@ -485,6 +493,26 @@ def constrain_worker():
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
 
 
+def worker_environment():
+    """Bound glibc arena reservations before the child interpreter initializes malloc."""
+    environment = os.environ.copy()
+    if sys.platform.startswith("linux"):
+        environment["MALLOC_ARENA_MAX"] = "2"
+    return environment
+
+
+def run_worker(specification):
+    """Launch every measured worker with the same allocator policy and wall deadline."""
+    return subprocess.run(
+        [sys.executable, "-m", "benchmarks.run", "--worker", json.dumps(specification)],
+        capture_output=True,
+        text=True,
+        timeout=CASE_TIMEOUT_SECONDS,
+        check=False,
+        env=worker_environment(),
+    )
+
+
 def run_suite(config):
     cases = [
         ("core", implementation, persistence, 1)
@@ -506,13 +534,7 @@ def run_suite(config):
             if time.monotonic() - started > 120:
                 raise TimeoutError("Suite exceeded its 120 second scheduling budget")
             specification = {"config": asdict(config), "case": [layer, implementation, persistence, connections]}
-            process = subprocess.run(
-                [sys.executable, "-m", "benchmarks.run", "--worker", json.dumps(specification)],
-                capture_output=True,
-                text=True,
-                timeout=CASE_TIMEOUT_SECONDS,
-                check=False,
-            )
+            process = run_worker(specification)
             if process.returncode:
                 raise RuntimeError(
                     f"Worker failed: {layer}/{implementation}/{persistence}/{connections}; no partial report written"

@@ -16,6 +16,8 @@ python -m unittest tests.test_benchmarks -v
 
 Use your environment's Python executable. The saved canonical run is [baseline-2026-10-18.json](../benchmarks/results/baseline-2026-10-18.json); its environment and per-sample raw timings are authoritative. Re-run the command to evaluate another machine. An optional `sse-starlette` encoder is measured only when already installed; the default core/HTTP cases need only the standard library and the installed core.
 
+The canonical JSON is a historical macOS measurement of immutable [source commit `7248096`](https://github.com/0RAJA/ui-stream/tree/72480966c9bb154362b2a378ec24eab633205f7b). Its raw bytes and recorded source hashes are preserved. The later Linux worker allocator policy changes the current harness; a fresh run records the current source fingerprint rather than replacing or relabeling that historical baseline. No Linux performance measurement is claimed by the macOS result.
+
 ## Workload and boundaries
 
 | Layer | Work | Persistence | Compared paths |
@@ -46,6 +48,8 @@ The benchmark host explicitly uses a listen backlog of 8; the unmodified demo de
 Defaults: three repetitions; fresh subprocess per case; alternating forward/reverse case order; no explicit warmup, so the first operation is cold while later operations warm naturally. There is no per-event sleep or producer pacing. The bounded burst makes queueing visible.
 
 Hard input bounds are 1,000 core/encoder events, 256 HTTP events, 8 readers, 4,096 payload bytes, three connection levels and three repetitions. Workers have a 30-second wall deadline, 15 CPU seconds and 128 file descriptors; Linux additionally caps address space at 512 MiB. The suite stops scheduling after 120 seconds. macOS has no portable address-space limit here; memory is bounded structurally by workload sizes, readers and channel capacity. The smoke preset is 16 core events / 16 HTTP events / 1 reader / 2 repetitions. Tests verify protocol, results and limits, with no machine-specific speed threshold.
+
+On Linux, both the suite and protocol-test workers use one launcher that sets `MALLOC_ARENA_MAX=2` in a copied child environment **before Python starts**. This bounds glibc allocator arena reservations so thread creation does not consume the 512 MiB virtual-address budget merely through multiple arenas; it does not raise the address-space limit or reduce the tested 1/4/8 readers. The parent environment is unchanged. See the [GNU libc arena tunable documentation](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html). New worker results record the actual CPU/FD/address-space limits and allocator environment in `worker_limits`; the historical macOS JSON predates these fields.
 
 Only synthetic data and loopback sockets are used. Temporary databases are removed. Public JSON records hardware/OS/Python/package versions and relative-source AST hashes (formatting/comments ignored), never hostnames, usernames, executable locations or local filesystem paths.
 

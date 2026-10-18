@@ -3,14 +3,38 @@
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 from benchmarks import run as benchmark
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_linux_worker_allocator_is_set_before_startup_without_relaxing_limits(self):
+        self.assertTrue(callable(getattr(benchmark, "run_worker", None)), "Benchmark workers need a shared launcher")
+        expected_address_space = 512 * 1024 * 1024 if sys.platform.startswith("linux") else None
+        specification = {
+            "config": {"events": 16, "http_events": 16, "connections": [1], "repeats": 1},
+            "case": ["core", "raw", "none", 1],
+        }
+        with patch.dict(os.environ, {"MALLOC_ARENA_MAX": "99", "UI_STREAM_BENCHMARK_SENTINEL": "synthetic"}):
+            with patch.object(benchmark.sys, "platform", "linux"):
+                environment = benchmark.worker_environment()
+                self.assertEqual(environment["UI_STREAM_BENCHMARK_SENTINEL"], "synthetic")
+                process = benchmark.run_worker(specification)
+            self.assertEqual(os.environ["MALLOC_ARENA_MAX"], "99")
+            with patch.object(benchmark.sys, "platform", "darwin"):
+                self.assertEqual(benchmark.worker_environment()["MALLOC_ARENA_MAX"], "99")
+        self.assertEqual(process.returncode, 0, process.stderr)
+        limits = json.loads(process.stdout)["worker_limits"]
+        self.assertEqual(limits["malloc_arena_max"], "2")
+        self.assertEqual(limits["cpu_seconds"], 15)
+        self.assertEqual(limits["file_descriptors"], 128)
+        self.assertEqual(limits["address_space_bytes"], expected_address_space)
+
     def test_rejects_unbounded_workloads(self):
         for options in (
             {"events": 1001},
@@ -52,12 +76,7 @@ class BenchmarkTests(unittest.TestCase):
             for implementation in ("raw", "runtime"):
                 specification = {"config": config, "case": ["http", implementation, "sqlite", connections]}
                 with self.subTest(connections=connections, implementation=implementation):
-                    process = subprocess.run(
-                        [sys.executable, "-m", "benchmarks.run", "--worker", json.dumps(specification)],
-                        capture_output=True,
-                        text=True,
-                        timeout=benchmark.CASE_TIMEOUT_SECONDS,
-                    )
+                    process = benchmark.run_worker(specification)
                     self.assertEqual(process.returncode, 0, process.stderr)
                     result = json.loads(process.stdout)
                     self.assertEqual(result["verification"]["received_business_events"], 16 * connections)
@@ -81,7 +100,11 @@ except TimeoutError:
     print("admission rejected cleanly")
 """
         process = subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, text=True, timeout=benchmark.CASE_TIMEOUT_SECONDS
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=benchmark.CASE_TIMEOUT_SECONDS,
+            env=benchmark.worker_environment(),
         )
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(process.stdout.strip(), "admission rejected cleanly")
