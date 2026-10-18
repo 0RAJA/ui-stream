@@ -10,7 +10,8 @@ from ui_stream.codec import ControlEvent
 from ui_stream.exceptions import InvalidCursor, LiveUnavailable
 
 logger = logging.getLogger(__name__)
-STREAM_CURSOR_PATTERN = re.compile(r"^\d+-\d+$")
+STREAM_CURSOR_PATTERN = re.compile(r"^[0-9]+-[0-9]+$")
+STREAM_ID_PART_MAX = str(2**64 - 1)
 STREAM_START_CURSOR = "0-0"
 CLOSING_EVENTS = frozenset((ControlEvent.STREAM_RESET, ControlEvent.STREAM_END))
 
@@ -18,8 +19,14 @@ CLOSING_EVENTS = frozenset((ControlEvent.STREAM_RESET, ControlEvent.STREAM_END))
 def normalize_cursor(value):
     if not value:
         return STREAM_START_CURSOR
-    if not STREAM_CURSOR_PATTERN.fullmatch(value):
+    if not isinstance(value, str) or not STREAM_CURSOR_PATTERN.fullmatch(value):
         raise InvalidCursor("Invalid stream cursor")
+    for part in value.split("-"):
+        digits = part.lstrip("0") or "0"
+        if len(digits) > len(STREAM_ID_PART_MAX) or (
+            len(digits) == len(STREAM_ID_PART_MAX) and digits > STREAM_ID_PART_MAX
+        ):
+            raise InvalidCursor("Invalid stream cursor")
     return value
 
 

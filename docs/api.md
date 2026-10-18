@@ -29,3 +29,14 @@ Store 自行限制持久快照容量；活动更新由 `send` 驱动，不是后
 `finish_retry` checkpoint 后关闭，不构造终态或提交最终结果。
 
 宿主迁移：声明精确版本 extra 依赖，移除同名内嵌 `ui_stream` 防止遮蔽，重新生成依赖锁并验证实际导入位置；业务模型、权限、事务和任务异常留在宿主。
+
+## 有限归档预算与真实完整性
+
+`max_events` 是一次 execution 的累计归档事件预算，不是 pending 批大小。比如设为 2、每条 checkpoint，发送 1–4 后，latest snapshot 可停在 2，而实时值与最终业务结果继续到 4，完整性为 TRUNCATED。即使 Store 只保留常量空间的最新值，这个累计策略仍生效。有限任务应配置足够预算；长任务应显式轮换 execution 或选择适合无限最新值的策略/实现，不能将默认配置当作无限快照服务。
+
+`Checkpoint(capacity_exhausted=True)` 表示后续停止归档缓冲。若本批恰好填满且没有丢事件，可以仍是 COMPLETE；下一条实际被丢弃才升级 TRUNCATED。`Summary` 的标志也包含构造时传入的初始完整性。
+
+## 可选 Redis reader
+
+`normalize_cursor` 接受 ASCII 的两段 uint64 Redis stream ID。reader 不负责授权、初始快照或重连补发。
+使用 `decode_responses=False` 可让适配器逐项跳过坏 payload 并推进真实 entry ID。正常的字符串响应也受支持；但 `decode_responses=True` 的客户端可能在返回任何 entry 前因坏 UTF-8 解析失败，此时归一为 `LiveUnavailable` 并结束本次 reader，由宿主重新读快照；不会猜测未知游标或承诺跳过该 entry。

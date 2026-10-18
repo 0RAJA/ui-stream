@@ -2,7 +2,7 @@
 
 [English](releasing.en.md) · [文档导航](README.md)
 
-准备期仓库保持私有，不发布 PyPI 或公开 Release。CI、双语文档、安全与发布配置就绪后再恢复 public。
+准备期仓库保持私有。源码 CI、双语文档与扫描通过后可恢复 public，再配置并回读验证 `v*` tag 与 `0RAJA` required reviewer 的完整环境保护。保护验证后才能配置 Trusted Publisher 和激活发布；不支持保护时停止，不降级或购买方案。
 
 | 阶段 | 必需检查 |
 | --- | --- |
@@ -12,7 +12,7 @@
 
 ```sh
 python -m tools.check_docs
-python -m unittest discover -s tests -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
@@ -33,8 +33,9 @@ python -m tools.verify_distribution --dist dist --check-tag v0.1.0a1
 | Environment | `pypi` |
 | OIDC | `id-token: write` |
 
-GitHub `pypi` environment 建议限制 `v*` tag，并由 `0RAJA` 审核。只在 publisher job 授予 OIDC；不复制 API token。
-获准后添加 PyPI pending publisher、配置 environment，再将模板加入 `.github/workflows/release.yml`。
+GitHub `pypi` environment 必须仅允许 `v*` tag，并要求 `0RAJA` 人工审核。只在 publisher job 授予 OIDC；不复制 API token。
+在已批准范围内，先配置 environment 并回读完整保护，再添加 PyPI pending publisher，最后将模板加入 `.github/workflows/release.yml`。
+抵达部署审核时由维护者本人在 GitHub Review deployments 中批准；自动化不代批或绕过。
 pending publisher 不保留名称，首次发布前需再次核查。
 
 发布 alpha 时使用 `v0.1.0a1` 与 prerelease 标记；先等最新必要 CI 全绿，不能只因创建 Release 就称发布成功。

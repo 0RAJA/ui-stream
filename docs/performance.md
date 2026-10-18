@@ -4,6 +4,55 @@
 
 这组基准回答小规模合成事件流的时间主要花在哪里，不用于宣称生产容量上限。core 负责协调宿主提供的事件、发布和归档接口；HTTP 宿主与持久化实现是独立选择。
 
+## 先看结论：本机传输子项可接受，整体为条件通过
+
+这里给出一个**工程验收示例**，由维护工作选择，并非通用行业阈值：单个有限任务、128 字节 message（另含 JSON/SSE 元数据）、每 500 ms 更新一次（2 Hz）、最多 8 个本机观察者。给额外的事件到解析延迟分配更新周期的 10%，即 **50 ms**；给完整短 worker 分配 **128 MiB** RSS。浏览器绘制、远端网络、计算耗时和恢复时延另行验收。
+
+历史 9 个 runtime HTTP/SQLite 样本在每次短突发中都满足这个传输预算：最坏一次 p99 为 **2.897 ms**，占预算 **5.8%**；所有已观测延迟的最大值为 **2.956 ms**。这足以支持继续本地功能验收。原始数据测的是突发，不是持续 2 Hz 的实际 Demo；因此**整体为条件通过，尚未证明生产 SLO**。
+
+| 验收子项 | 明确预算或正确性要求 | 实测证据 / 结论 |
+| --- | --- | --- |
+| 参考宿主短突发完整性 | 每个读者收到有序业务帧及一次终态，完成后结果已提交 | 9 个 runtime 样本共 2,496 业务帧、39 终态；全部断言通过 |
+| runtime 参考宿主额外传输延迟 | 每次样本 p99 ≤50 ms | 最坏 2.897 ms；此子项通过，不是持续尾延迟承诺 |
+| 短 worker 内存 | 峰值 RSS ≤128 MiB，含服务端、本机客户端及可选模块 | runtime HTTP 最大 56.375 MiB；短测通过，长期增长未验证 |
+| 实际 Demo 的 2 Hz / 8 人准入 | 保持 500 ms 更新节奏、8 人同时接入 | 未验证：实际 Demo backlog=5、checkpoint=3；基准 backlog=8、无 pacing、checkpoint=16 |
+| 断开 / 重启后恢复耗时 | 需由产品先定义恢复时间预算 | 本基线未计时；单测验证恢复/回滚正确性，不能代替时延验收 |
+| 非空尾部完成、断电持久性 | 需覆盖对应完成事务与持久性模式 | 基线 512 和 64 均为 checkpoint=16 的整数倍，finish 无业务 pending；SQLite WAL/NORMAL 不能等同 FULL 断电持久性 |
+
+## 图 1：读者增加时，延迟怎样变化
+
+![1、4、8 读者的最慢首帧与每次样本 delivery p95，毫秒](performance-figures/http-latency.png)
+
+横轴只含真实测过的 **1、4、8** 个读者，纵轴是 **ms，越低越好**。每组保留三次原始点，中间线为三次结果的中位数，须线为 min–max；连线只引导读图，不是额外测量或拟合。首帧每次只有 1/4/8 个观察值，这里的 p95 等于最慢观察者，不能解释为稳健的尾 SLO。delivery p95 是各次样本自己的分位数，不是三次合并后的 p95。
+
+**实测：**读者增加时此参考路径延迟上升，runtime 与同宿主 raw 的范围大体接近。**解释：**代码为每个读者编码、发送并解析帧，更多线程与 socket 会增加工作；具体有多少来自调度、编码或队列尚无 profiler 证据，不能把全部增长归因于 runtime。
+
+## 图 2：总投递增加，不等于生产者变快
+
+![同一完整 HTTP 波次的唯一事件吞吐与总帧吞吐](performance-figures/http-throughput.png)
+
+两面板共用真实读者数。左侧是 **唯一业务事件/秒**，右侧是 **投递业务帧/秒**；分母都是最早请求至最后读者结束的完整波次时间。一个事件投给 8 人计 8 帧，终态不计入分子。数值越高表示此固定负载完成得越快，不是支持的最大连接数。
+
+runtime 三个点的唯一事件吞吐中位数约 **4,266 → 3,096 → 2,575 events/s**，总投递约 **4,266 → 12,383 → 20,600 frames/s**。右图上升主要包含 fanout 的计数乘数；不能据此声称核心在高并发下变快，或据 raw/runtime 三次重叠范围排出胜负。
+
+## 图 3：SQLite 成本应与核心协调成本分开
+
+![相同 512 事件的 volatile 与 SQLite 生产区间耗时，毫秒](performance-figures/core-persistence.png)
+
+纵轴为相同 **512 个事件的生产区间 ms，越低越好**；保留三次原始点与中位数/min–max。runtime 的中位数从临时内存的 **5.80 ms** 变为 SQLite 的 **75.68 ms**（两组中位数之比约 **13.1×**），raw 的 SQLite 范围与 runtime 重叠。
+
+**已知结构：**每 16 条打开连接并提交一次 checkpoint，带来连接、编码与事务工作；约 6.25% 的 send 包含 checkpoint，所以 p50 仍在微秒级而 p95 会包含毫秒级工作。**尚不能分解：**磁盘、文件缓存、SQLite、编码和锁各占多少。不能将 13.1× 都称为 runtime 开销，也不能据短测优选某个框架。
+
+## 图表复现与来源
+
+图表来自未改动的 [36 样本原始 JSON](../benchmarks/results/baseline-2026-10-18.json)，对应不可变源码 `7248096`，不是本轮修复后的重新测量。[派生序列](performance-figures/series.json)保留原值、统计口径和原始文件 SHA256。每张 PNG 同目录有同名 SVG；均无需外部图片服务。
+
+下面的可选维护工具使用已有 ReportLab；macOS 用系统 `sips` 生成 PNG。没有 `sips` 时仍导出 SVG；普通核心、Demo 与 benchmark 不需要 ReportLab。PDF 可通过 `--pdf-output` 导向仓库外目录。不要在用户验收 Demo 或本机忙碌时用新测量覆盖历史基线。
+
+```sh
+python -m benchmarks.plot --input benchmarks/results/baseline-2026-10-18.json --output docs/performance-figures
+```
+
 ## 复现
 
 在仓库根目录使用已有 Python 环境，先安装核心包。`benchmarks/`、`demos/` 与 `examples/` 都留在仓库，不进入 wheel 或 sdist。脚本不会自动安装依赖。
@@ -22,7 +71,7 @@ canonical JSON 是不可变[源码提交 `7248096`](https://github.com/0RAJA/ui-
 
 | 层次 | 负载 | 持久化 | 对照 |
 | --- | --- | --- | --- |
-| core 微基准 | 512 个 progress 事件、128 字节 ASCII 正文、单生产者、同步帧摘要接收器 | 分开运行内存临时状态和 SQLite 最新快照 | `StreamRuntime` 与 raw loop |
+| core 微基准 | 512 个 progress 事件、128 字节 ASCII 文本字段（另含事件元数据）、单生产者、同步帧摘要接收器 | 分开运行内存临时状态和 SQLite 最新快照 | `StreamRuntime` 与 raw loop |
 | SSE 编码 | 512 个相同 compact JSON、`id: <step>-0`、LF 换行帧 | 无持久化、网络或 flush | ui-stream JSON/SSE profile 与已安装的 sse-starlette `ServerSentEvent` |
 | HTTP + SQLite | 64 个事件、单生产者、localhost 同时 1 → 4 → 8 个独立读取连接 | SQLite 最新快照；尾部、终态与业务结果原子提交 | 同一 HTTP/SQLite 适配器，分别使用 runtime 与 raw 生产者 |
 
@@ -53,18 +102,9 @@ Linux 下，suite 和协议测试共用 launcher，在 **Python 子解释器启�
 
 只使用合成数据与 loopback，临时数据库自动删除。公开 JSON 记录硬件、OS、Python、依赖版本和相对源码 AST 摘要（忽略格式与注释），不包含主机名、用户名、解释器绝对位置或本机路径。
 
-## 相关方案：功能接入比较与实测分开
+## 选型与实测分开
 
-官方源核查日期：2026-10-18。明确区分查阅版本和本机实测版本，不提供不等价框架排行榜。
-
-| 方案 | 官方源与查阅版本 | 接入、持久化边界 | 本次实测 |
-| --- | --- | --- | --- |
-| ui-stream | 当前 checkout，JSON 记录源码摘要 | 与框架无关的 runtime ports；宿主拥有事务、fencing、结果和传输，最新快照恢复由适配器实现 | core/raw、参考 HTTP/SQLite；安装 Pydantic 时测 JSON/SSE 编码 |
-| sse-starlette | [v3.5.0 release](https://github.com/sysid/sse-starlette/releases/tag/v3.5.0)、[官方用法](https://github.com/sysid/sse-starlette) | ASGI `EventSourceResponse`，处理 ping、断连与发送超时；事件来源和持久化由应用提供，可作为 ui-stream 宿主传输层 | 本机 **3.2.0**，只比较同 JSON/LF/ID 字节的编码，不比较 ASGI/uvicorn 吞吐 |
-| Django EventStream | [官方 metadata 5.3.4](https://raw.githubusercontent.com/fanout/django-eventstream/master/pyproject.toml)、[存储说明](https://github.com/fanout/django-eventstream#event-storage) | Django channel/view 和权限；可选数据库事件先存后发，支持历史恢复；语义不同于宿主最新快照与结果原子事务 | 未安装，不安装新依赖，不提供实测数值 |
-| Starlette `StreamingResponse` | [官方响应文档](https://github.com/Kludex/starlette/blob/main/docs/responses.md)、[1.8.0 release](https://github.com/Kludex/starlette/releases/tag/1.8.0) | ASGI 流响应接受同步/异步迭代器；SSE framing 与持久化由应用选择，官方文档将 SSE 指向 sse-starlette | 本机 0.52.1，不独立测试框架；编码 adapter 不代表 `StreamingResponse` 性能 |
-
-做应用级对比前，需要对齐 HTTP server、事件校验、编码、生产节奏、逐事件 flush、队列边界、重连行为、归档保留和 commit-before-terminal 语义；否则吞吐差异混合了不同组件职责。
+[方案选型](comparison.md)比较 StreamingResponse、sse-starlette、当前 FastAPI 内置 SSE、Django EventStream 与 LangGraph 的真实职责与恢复边界。只有本机已安装的 sse-starlette 3.2.0 参与等价字节编码测量；不是 ASGI 网络压测，没有框架容量排名。
 
 ## 局限
 

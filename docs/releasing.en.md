@@ -2,7 +2,7 @@
 
 [简体中文](releasing.md) · [Documentation](README.en.md)
 
-Keep the repository private during preparation. Do not publish to PyPI or create a public Release until CI, bilingual docs, security checks, and publishing setup are ready; then restore public visibility.
+Keep the repository private during preparation. Once source CI, bilingual docs, and scanning pass, restore public visibility, then configure and read back the full `v*` tag policy and required reviewer `0RAJA`. Configure the Trusted Publisher and activate publishing only after protection is verified. Stop if protection is unsupported; do not weaken it or purchase a plan.
 
 | Stage | Required gates |
 | --- | --- |
@@ -12,7 +12,7 @@ Keep the repository private during preparation. Do not publish to PyPI or create
 
 ```sh
 python -m tools.check_docs
-python -m unittest discover -s tests -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
@@ -34,7 +34,8 @@ The maintainer must approve these exact persistent trust settings before changes
 | OIDC | `id-token: write` |
 
 Restrict the GitHub `pypi` environment to `v*` tags and reviewer `0RAJA`. Grant OIDC only to the publisher job; copy no API token.
-After approval, add the PyPI pending publisher and GitHub environment, then append the template job to `.github/workflows/release.yml`.
+Within the approved scope, configure the GitHub environment and read back its full protections first, then add the PyPI pending publisher, and finally append the template job to `.github/workflows/release.yml`.
+When deployment review is reached, the maintainer approves it in GitHub Review deployments; automation must not approve on their behalf or bypass the gate.
 A pending publisher does not reserve the project name; recheck immediately before first publication.
 
 Use tag `v0.1.0a1` and a prerelease flag for this alpha. Wait for all required CI on the latest commit; creating a Release is not successful publication.

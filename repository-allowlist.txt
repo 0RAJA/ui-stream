@@ -20,6 +20,7 @@ SECURITY.en.md
 SECURITY.md
 benchmarks/README.md
 benchmarks/__init__.py
+benchmarks/plot.py
 benchmarks/results/baseline-2026-10-18.json
 benchmarks/run.py
 demos/__init__.py
@@ -42,6 +43,8 @@ docs/api.en.md
 docs/api.md
 docs/architecture.en.md
 docs/architecture.md
+docs/comparison.en.md
+docs/comparison.md
 docs/diagrams/architecture.en.png
 docs/diagrams/architecture.en.svg
 docs/diagrams/architecture.png
@@ -52,6 +55,13 @@ docs/diagrams/completion.png
 docs/diagrams/completion.svg
 docs/license.en.md
 docs/license.md
+docs/performance-figures/core-persistence.png
+docs/performance-figures/core-persistence.svg
+docs/performance-figures/http-latency.png
+docs/performance-figures/http-latency.svg
+docs/performance-figures/http-throughput.png
+docs/performance-figures/http-throughput.svg
+docs/performance-figures/series.json
 docs/performance.en.md
 docs/performance.md
 docs/pypi-publish-job.yml
@@ -81,6 +91,7 @@ tests/test_demo_client.py
 tests/test_docs.py
 tests/test_publishing.py
 tests/test_release_checks.py
+tests/test_runtime_boundaries.py
 tools/__init__.py
 tools/build_local.py
 tools/check_docs.py

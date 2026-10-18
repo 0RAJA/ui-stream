@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="660" preserveAspectRatio="xMinYMin meet" viewBox="0 0 1120 660" version="1.0" fill-rule="evenodd" role="img" aria-labelledby="chart-title chart-description">
+	<title id="chart-title">Core producer interval with volatile and SQLite latest-snapshot archive</title><desc id="chart-description">A zero-baseline comparison of total producer milliseconds for the same event workload. Blue circles are raw; orange diamonds are runtime. Dots are independent runs, horizontal bars are medians, and whiskers are min-max, not confidence intervals. SQLite includes its transaction and connection costs.</desc><clipPath id="clip">
+		<rect x="0" y="0" width="1120" height="660" />
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-660)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="1120" height="660" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="55" y="618" style="font-family: Helvetica-Bold; font-size: 22px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,1236) scale(1,-1)">Core producer interval: volatile and SQLite archive</text>
+			<text x="55" y="588" style="font-family: Helvetica; font-size: 15px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,1176) scale(1,-1)">512 events/run | 128 ASCII message bytes (+ metadata) | 1 producer | checksum sink | checkpoint batch: 16</text>
+			<path d="M 85,548 L 120,548 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 2.5;" />
+			<circle cx="102.5" cy="548" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="133" y="543" style="font-family: Helvetica; font-size: 16px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,1086) scale(1,-1)">raw</text>
+			<path d="M 245,548 L 280,548 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 2.5; stroke-dasharray: 7, 4;" />
+			<polygon points="262.5 553.1, 267.6 548, 262.5 542.9, 257.4 548" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="293" y="543" style="font-family: Helvetica; font-size: 16px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,1086) scale(1,-1)">runtime</text>
+			<text x="455" y="543" style="font-family: Helvetica; font-size: 15px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,1086) scale(1,-1)">Dots: 3 runs | bar: median | whiskers: min-max (not CI)</text>
+			<text x="55" y="43" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,86) scale(1,-1)">Recorded 2026-10-18 | Apple M3 Pro | Python 3.11.10 | SQLite 3.54.0</text>
+			<text x="55" y="21" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,42) scale(1,-1)">Source: baseline-2026-10-18.json | input SHA256 and values: series.json</text>
+			<text x="100" y="514" style="font-family: Helvetica-Bold; font-size: 18px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,1028) scale(1,-1)">Total producer interval (ms)</text>
+			<path d="M 100,200 L 1070,200 Z" style="stroke: rgb(85%,88%,90%); stroke-linecap: butt; stroke-width: 1;" />
+			<path d="M 100,272.5 L 1070,272.5 Z" style="stroke: rgb(85%,88%,90%); stroke-linecap: butt; stroke-width: 1;" />
+			<path d="M 100,345 L 1070,345 Z" style="stroke: rgb(85%,88%,90%); stroke-linecap: butt; stroke-width: 1;" />
+			<path d="M 100,417.5 L 1070,417.5 Z" style="stroke: rgb(85%,88%,90%); stroke-linecap: butt; stroke-width: 1;" />
+			<path d="M 100,490 L 1070,490 Z" style="stroke: rgb(85%,88%,90%); stroke-linecap: butt; stroke-width: 1;" />
+			<g transform="">
+				<g transform="">
+					<path d="M 100,200 L 100,490 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+				</g>
+				<g transform="">
+					<path d="M 100,200 L 95,200 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+					<path d="M 100,272.5 L 95,272.5 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+					<path d="M 100,345 L 95,345 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+					<path d="M 100,417.5 L 95,417.5 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+					<path d="M 100,490 L 95,490 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+				</g>
+				<g transform="">
+					<g transform=" matrix(1,0,0,1,91,195)">
+						<text x="-7.784000000000001" y="-5.600000000000001" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,-11) scale(1,-1)">0</text>
+					</g>
+					<g transform=" matrix(1,0,0,1,91,267.5)">
+						<text x="-15.568000000000001" y="-5.600000000000001" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,-11) scale(1,-1)">25</text>
+					</g>
+					<g transform=" matrix(1,0,0,1,91,340)">
+						<text x="-15.568000000000001" y="-5.600000000000001" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,-11) scale(1,-1)">50</text>
+					</g>
+					<g transform=" matrix(1,0,0,1,91,412.5)">
+						<text x="-15.568000000000001" y="-5.600000000000001" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,-11) scale(1,-1)">75</text>
+					</g>
+					<g transform=" matrix(1,0,0,1,91,485)">
+						<text x="-23.352" y="-5.600000000000001" style="font-family: Helvetica; font-size: 14px;fill: rgb(25%,34%,41%); stroke:none;" transform="translate(0,-11) scale(1,-1)">100</text>
+					</g>
+				</g>
+			</g>
+			<path d="M 100,200 L 1070,200 Z" style="stroke: rgb(25%,34%,41%); stroke-linecap: butt; stroke-width: 1;" />
+			<path d="M 287,215.369275 L 287,216.391284 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 275,215.369275 L 299,215.369275 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 275,216.391284 L 299,216.391284 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 268,215.503641 L 306,215.503641 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 3;" />
+			<circle cx="275.0" cy="216.3912843" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<circle cx="287.0" cy="215.369275" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<circle cx="299.0" cy="215.5036407" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="260.3225" y="237.3912843" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,474) scale(1,-1)">5.35 ms</text>
+			<text x="274.9175" y="171" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,342) scale(1,-1)">raw</text>
+			<path d="M 413,216.444087 L 413,217.780625 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3; stroke-dasharray: 3, 2;" />
+			<path d="M 405,216.444087 L 421,216.444087 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 405,217.780625 L 421,217.780625 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 394,216.811906 L 432,216.811906 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 3;" />
+			<polygon points="401 222.8806, 406.1 217.7806, 401 212.6806, 395.9 217.7806" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<polygon points="413 221.5441, 418.1 216.4441, 413 211.3441, 407.9 216.4441" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<polygon points="425 221.9119, 430.1 216.8119, 425 211.7119, 419.9 216.8119" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="386.3225" y="238.780625" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,477) scale(1,-1)">5.80 ms</text>
+			<text x="387.995" y="171" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,342) scale(1,-1)">runtime</text>
+			<text x="255.055" y="142" style="font-family: Helvetica-Bold; font-size: 17px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,284) scale(1,-1)">Volatile latest snapshot</text>
+			<path d="M 757,410.665547 L 757,432.421587 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 745,410.665547 L 769,410.665547 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 745,432.421587 L 769,432.421587 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 738,422.922394 L 776,422.922394 Z" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 3;" />
+			<circle cx="745.0" cy="410.6655468" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<circle cx="757.0" cy="422.92239390000003" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<circle cx="769.0" cy="432.4215875" r="4.3" style="stroke: rgb(0%,44%,69%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="726.1525" y="453.4215875" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,906) scale(1,-1)">76.87 ms</text>
+			<text x="744.9175" y="171" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,342) scale(1,-1)">raw</text>
+			<path d="M 883,411.136069 L 883,428.585128 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3; stroke-dasharray: 3, 2;" />
+			<path d="M 875,411.136069 L 891,411.136069 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 875,428.585128 L 891,428.585128 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.3;" />
+			<path d="M 864,419.478525 L 902,419.478525 Z" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 3;" />
+			<polygon points="871 416.2361, 876.1 411.1361, 871 406.0361, 865.9 411.1361" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<polygon points="883 424.5785, 888.1 419.4785, 883 414.3785, 877.9 419.4785" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<polygon points="895 433.6851, 900.1 428.5851, 895 423.4851, 889.9 428.5851" style="stroke: rgb(83%,36%,0%); stroke-linecap: butt; stroke-width: 1.8; fill: rgb(100%,100%,100%); fill-rule: evenodd;" />
+			<text x="852.1525" y="449.5851282" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,899) scale(1,-1)">75.68 ms</text>
+			<text x="857.995" y="171" style="font-family: Helvetica; font-size: 15px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,342) scale(1,-1)">runtime</text>
+			<text x="726.5" y="142" style="font-family: Helvetica-Bold; font-size: 17px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,284) scale(1,-1)">SQLite WAL / NORMAL</text>
+			<text x="55" y="103" style="font-family: Helvetica; font-size: 14px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,206) scale(1,-1)">Timed interval includes production and final commit; database setup and final verification are outside it.</text>
+			<text x="55" y="81" style="font-family: Helvetica; font-size: 14px;fill: rgb(9%,16%,22%); stroke:none;" transform="translate(0,162) scale(1,-1)">SQLite adds connection, transaction and snapshot work. This compares archive adapters, not frameworks.</text>
+		</g>
+	</g>
+</svg>

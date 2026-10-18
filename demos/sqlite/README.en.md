@@ -38,3 +38,5 @@ PYTHONPATH=src python -m unittest tests.test_demo tests.test_contract tests.test
 ```
 
 Demo contracts run under -I -S with temporary SQLite and real localhost HTTP. Existing Node runs controlled state tests of the actual demo.js; these do not replace real browser interaction.
+
+The client checks both connection generation and snapshot-read order. An older poll response or error cannot replace a newer confirmed terminal state. Successful reads clear transient network notices while retaining persisted warnings.

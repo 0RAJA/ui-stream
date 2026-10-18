@@ -20,3 +20,5 @@ Individually update `repository-allowlist.txt` for repository files. Only core b
 
 Chinese is primary; link English counterparts and keep commands, APIs, versions, and behavior aligned. Keep README focused on purpose, startup, boundaries, and entry points; put details in docs.
 `README.pypi.md` is generated from the Chinese README with absolute links: run `python -m tools.check_docs --write-pypi` after editing. Retain SVG sources for static images; Mermaid alone is insufficient.
+
+Release scanning expects a clean clone/export. Keep virtual environments and Demo SQLite data outside that tree. A development `.venv/` or `demo.sqlite3` is deliberately rejected by the strict allowlist. Use clean inputs for release verification rather than relaxing the gate to hide extra files.

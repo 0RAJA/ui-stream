@@ -12,6 +12,7 @@ const statuses = {RUNNING: "运行中", DONE: "已完成", ERROR: "业务失败"
 const integrityLabels = {COMPLETE: "完整", DEGRADED: "降级", TRUNCATED: "截断"};
 const pendingKey = "ui-stream-demo-pending";
 let generation = 0;
+let snapshotRequest = 0;
 let source = null;
 let pollTimer = null;
 let reconnectTimer = null;
@@ -87,13 +88,25 @@ function renderSaved(job) {
   byId("snapshot").textContent = job.snapshot ? JSON.stringify(job.snapshot, null, 2) : "尚未到达保存阈值";
   byId("snapshot-label").textContent = job.snapshot ? `最新已保存：第 ${job.snapshot.step} 步；游标 ${job.cursor}` : "每秒读取一次，只保存最新进度。";
   byId("result").textContent = job.result ? JSON.stringify(job.result, null, 2) : job.status === "INTERRUPTED" ? "未提交最终结果。可以创建新任务。" : "任务结束后显示已提交的结果。";
-  if (job.warning) notice(job.warning);
+  notice(job.warning || "");
   if (!running) {
     clearConnection();
     byId("connection-status").textContent = "已结束";
     if (job.snapshot && job.snapshot.step > lastStep) progress(job.snapshot, true);
   }
   buttons();
+}
+
+// A terminal refresh can overtake a periodic GET from the same connection generation.
+async function readSaved(gen, jobId) {
+  const requestId = ++snapshotRequest;
+  try {
+    const job = await request(`/api/jobs/${jobId}`);
+    return gen === generation && requestId === snapshotRequest ? job : null;
+  } catch (error) {
+    if (gen === generation && requestId === snapshotRequest) throw error;
+    return null;
+  }
 }
 
 function schedulePoll(gen) {
@@ -108,8 +121,8 @@ async function recoverClosedProducer(gen, jobId) {
   byId("connection-status").textContent = "生产者已停止，终态尚未确认";
   buttons();
   try {
-    const job = await request(`/api/jobs/${jobId}`);
-    if (gen !== generation) return;
+    const job = await readSaved(gen, jobId);
+    if (!job) return;
     renderSaved(job);
     if (running) notice("生产者已停止，SQLite 终态尚未确认。保留当前快照并定时回查；可手动恢复连接，或重启演示服务收敛状态。");
   } catch (error) {
@@ -122,8 +135,8 @@ async function recoverClosedProducer(gen, jobId) {
 async function poll(gen) {
   if (gen !== generation || !activeId) return;
   try {
-    const job = await request(`/api/jobs/${activeId}`);
-    if (gen !== generation) return;
+    const job = await readSaved(gen, activeId);
+    if (!job) return;
     renderSaved(job);
   } catch (error) {
     if (gen !== generation) return;
@@ -154,6 +167,7 @@ function connect(gen, job) {
   stream.addEventListener("finished", () => finish(gen));
   stream.addEventListener("state", (message) => {
     if (gen !== generation || source !== stream) return;
+    ++snapshotRequest;
     renderSaved(JSON.parse(message.data));
   });
   stream.addEventListener("reset", () => {
@@ -181,8 +195,8 @@ async function restore(jobId) {
   paused = false;
   byId("connection-status").textContent = "读取已保存快照";
   try {
-    const job = await request(`/api/jobs/${jobId}`);
-    if (gen !== generation) return;
+    const job = await readSaved(gen, jobId);
+    if (!job) return;
     progress(job.snapshot, true, true);
     renderSaved(job);
     if (running) {

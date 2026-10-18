@@ -7,7 +7,7 @@ LICENSE contains the full MIT permission and warranty terms with the original co
 
 The code was refactored into a host-neutral runtime and optional adapters.
 A new counter example, SQLite/browser demonstration, independent tests, packaging,
-and documentation were prepared alongside the extraction. See PROVENANCE.md.
+and documentation were prepared alongside the extraction. See https://github.com/0RAJA/ui-stream/blob/main/PROVENANCE.md.
 No upstream endorsement or right to use upstream trademarks is claimed.
 
 The maintainer has authorized public distribution of this extraction and its

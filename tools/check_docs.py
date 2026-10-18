@@ -62,7 +62,7 @@ def check(project, *, write=False):
         target.write_text(expected)
     if not target.is_file() or target.read_text() != expected:
         raise ValueError("Regenerate README.pypi.md with --write-pypi")
-    for path in (project / "docs/diagrams").glob("*.svg"):
+    for path in (project / "docs").rglob("*.svg"):
         text = path.read_text()
         if not all(marker in text for marker in ('role="img"', '<title id=', '<desc id=')):
             raise ValueError(f"SVG lacks accessible description: {path.name}")

@@ -53,7 +53,7 @@ assert store.snapshot.latest == 9 and store.snapshot.result == 13
 ![Component boundaries: a task calls Runtime; the host implements three ports; the UI reads live tail and snapshots](docs/diagrams/architecture.en.png)
 
 [Architecture and completion order](docs/architecture.en.md) · [API contracts](docs/api.en.md) ·
-[Demo](demos/sqlite/README.en.md) · [Performance and comparisons](docs/performance.en.md) ·
+[Demo](demos/sqlite/README.en.md) · [Performance charts](docs/performance.en.md) · [Choosing a solution](docs/comparison.en.md) ·
 [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md) · [Releasing](docs/releasing.en.md)
 
 The source CI matrix covers Python 3.11–3.14 on Linux/macOS; wheel, sdist, and README validation run on Linux.

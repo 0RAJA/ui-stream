@@ -69,6 +69,7 @@ class StreamRuntime(Generic[EventT]):
         self._live_business_bytes = 0
         self._degraded = False
         self._truncated = False
+        self._observe_archive_status(archive_status)
         self._archive_stopped = False
         self._live_stopped = False
         # 只在实际落库成功后推进，数据库故障时下一条事件会继续尝试。
@@ -217,6 +218,9 @@ class StreamRuntime(Generic[EventT]):
         """事件进入归档缓冲，达到批阈值时仅对数据库故障降级。"""
 
         if self._archive_stopped:
+            # A full store may still contain every earlier event; loss starts here.
+            if self._archive_status != Integrity.TRUNCATED:
+                self._degrade("UI stream archive capacity exhausted", status=Integrity.TRUNCATED)
             self._touch_activity_if_due()
             return
         # 持久存储 持续故障时 checkpoint 无法清空 pending。进程内缓冲仍必须受与

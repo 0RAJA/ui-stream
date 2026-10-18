@@ -4,6 +4,55 @@
 
 This first benchmark answers where time is spent for a small synthetic stream. It does not establish a production capacity limit. The core coordinates caller-owned event, publisher and archive ports; HTTP hosting and storage are adapter choices.
 
+## Read this first: transport fits the local budget; overall acceptance is conditional
+
+This is an **engineering acceptance example chosen for maintenance**, not an industry-wide threshold: one finite task, 128-byte message fields (plus JSON/SSE metadata), an update every 500 ms (2 Hz), and up to eight local observers. Allocate 10% of the update period, **50 ms**, to additional event-to-parser latency, and **128 MiB** RSS to the complete short-lived worker. Browser painting, remote networking, computation, and recovery timing need separate acceptance.
+
+The nine historical runtime HTTP/SQLite samples fit this transport budget in every measured burst: the worst per-run p99 was **2.897 ms**, or **5.8%** of the allowance; the largest individual observed latency was **2.956 ms**. This supports continuing local functional acceptance. The data measures bursts, not the paced 2 Hz Demo, so **overall acceptance is conditional; a production SLO is not established**.
+
+| Acceptance item | Explicit budget or correctness requirement | Evidence / verdict |
+| --- | --- | --- |
+| Reference-host burst completeness | Every reader receives ordered business frames and one terminal; result committed by completion | 2,496 business frames and 39 terminals across nine runtime samples; all assertions passed |
+| Additional runtime reference-host delivery latency | Each run p99 ≤50 ms | Worst 2.897 ms; passes this sub-budget, not a sustained tail-latency promise |
+| Short-worker memory | Peak RSS ≤128 MiB, including server, local clients, and optional imports | Runtime HTTP maximum 56.375 MiB; short-run pass, long-lived growth unverified |
+| Actual Demo at 2 Hz / eight admissions | Preserve 500 ms cadence with eight simultaneous observers | Unverified: actual Demo backlog=5/checkpoint=3; benchmark backlog=8/unpaced/checkpoint=16 |
+| Disconnect / restart recovery timing | Product must first define a recovery-time budget | Not timed here; functional recovery/rollback tests do not establish timing acceptance |
+| Non-empty-tail finish and power-loss durability | Cover the relevant final transaction and durability mode | 512 and 64 are multiples of checkpoint=16, leaving no business pending at finish; WAL/NORMAL is not FULL power-loss durability |
+
+## Figure 1: how latency changes with readers
+
+![Slowest first frame and per-run delivery p95 for one, four and eight readers, milliseconds](performance-figures/http-latency.png)
+
+The x-axis contains only the measured **1, 4, and 8** readers; the y-axis is **ms, lower is better**. Each group retains three observations, a median line and min–max whiskers. Connecting lines guide the eye; they add no observations or fitted points. A run has only 1/4/8 first-frame observations, so its first-frame p95 equals the slowest observer and cannot establish a robust tail SLO. Delivery p95 belongs to each individual run; the three runs are not pooled.
+
+**Observed:** this reference path's latency rises with reader count, with broadly similar raw/runtime ranges on the same host. **Explanation:** code encodes, sends, and parses frames for each reader, adding thread/socket work. Without profiling, the contributions of scheduling, encoding, and queueing remain hypotheses; all growth cannot be assigned to the runtime.
+
+## Figure 2: more deliveries do not mean a faster producer
+
+![Unique-event and aggregate-frame throughput over the complete HTTP wave](performance-figures/http-throughput.png)
+
+Both panels use actual reader counts. The left is **unique business events/s**; the right is **delivered business frames/s**. Both divide by the complete wave, from earliest request to last reader completion. One event sent to eight observers counts as eight frames. Terminals are excluded from the numerator. Higher values mean this fixed workload finished sooner, not a supported connection limit.
+
+Runtime median unique throughput is about **4,266 → 3,096 → 2,575 events/s**, while aggregate delivery is **4,266 → 12,383 → 20,600 frames/s**. The right panel includes the fanout multiplier. It does not show the core becoming faster at higher concurrency; overlapping three-run raw/runtime ranges do not establish a winner.
+
+## Figure 3: separate SQLite cost from core coordination
+
+![Producer interval for the same 512 events with volatile and SQLite storage, milliseconds](performance-figures/core-persistence.png)
+
+The y-axis is **producer interval in ms for the same 512 events, lower is better**; all three observations, medians and min–max ranges remain visible. The runtime median changes from **5.80 ms** with volatile state to **75.68 ms** with SQLite, about **13.1×** as a ratio of group medians. Raw SQLite ranges overlap runtime SQLite ranges.
+
+**Known structure:** every 16th event opens a connection and commits a checkpoint, adding connection, encoding, and transaction work. About 6.25% of sends include a checkpoint, explaining why p50 remains in microseconds while p95 includes millisecond work. **Not isolated:** how much comes from disk, caches, SQLite, encoding, or locking. The entire 13.1× difference is not runtime overhead, and these short runs cannot rank frameworks.
+
+## Reproduce the figures and inspect provenance
+
+Figures derive from the unchanged [36-sample raw JSON](../benchmarks/results/baseline-2026-10-18.json), tied to immutable source `7248096`; they are not new measurements of this review's fixes. [Derived series](performance-figures/series.json) retain original values, statistics and the raw file SHA256. Each PNG has a same-name SVG alongside it; no external image service is required.
+
+The optional maintenance tool below uses existing ReportLab; macOS uses system `sips` for PNG export. Without `sips`, it still writes SVG. Normal core, Demo and benchmark execution do not need ReportLab. Optional `--pdf-output` exports PDFs outside the repository. Do not overwrite the historical baseline by measuring while a user is accepting the Demo or the machine is busy.
+
+```sh
+python -m benchmarks.plot --input benchmarks/results/baseline-2026-10-18.json --output docs/performance-figures
+```
+
 ## Reproduce
 
 Run from a repository checkout with the core installed in your existing Python environment. The harness, `demos/` and `examples/` remain outside the wheel and source distribution. No benchmark dependency is installed automatically.
@@ -22,7 +71,7 @@ The canonical JSON is a historical macOS measurement of immutable [source commit
 
 | Layer | Work | Persistence | Compared paths |
 | --- | --- | --- | --- |
-| Core microbenchmark | 512 progress events, 128 ASCII payload bytes, one producer, synchronous frame checksum sink | Separate volatile and SQLite latest-snapshot cases | `StreamRuntime` and a raw loop |
+| Core microbenchmark | 512 progress events, 128 ASCII text-field bytes (plus event metadata), one producer, synchronous frame checksum sink | Separate volatile and SQLite latest-snapshot cases | `StreamRuntime` and a raw loop |
 | SSE encoding | 512 identical compact JSON payloads, `id: <step>-0`, LF framing | None; no network, flush or archive | ui-stream JSON/SSE profile and installed sse-starlette `ServerSentEvent` |
 | HTTP + SQLite | 64 events, one producer, 1 → 4 → 8 simultaneous readers on localhost | SQLite latest snapshot; tail, terminal and result in one final transaction | Same HTTP host/adapters, runtime and raw producer |
 
@@ -53,18 +102,9 @@ On Linux, both the suite and protocol-test workers use one launcher that sets `M
 
 Only synthetic data and loopback sockets are used. Temporary databases are removed. Public JSON records hardware/OS/Python/package versions and relative-source AST hashes (formatting/comments ignored), never hostnames, usernames, executable locations or local filesystem paths.
 
-## Related solutions: integration comparison, separate from measurements
+## Selection is separate from measurement
 
-Official sources checked on 2026-10-18. Versions below distinguish the source reviewed from the software actually measured; this is not a framework leaderboard.
-
-| Solution | Official source reviewed | Integration and durability boundary | Measured here |
-| --- | --- | --- | --- |
-| ui-stream | This checkout; source fingerprint in JSON | Framework-independent runtime ports; host owns transaction, fencing, result and transport. Latest-snapshot recovery is an adapter policy. | Core/raw and reference HTTP/SQLite; JSON/SSE encoder when Pydantic is present |
-| sse-starlette | [v3.5.0 release](https://github.com/sysid/sse-starlette/releases/tag/v3.5.0), [official usage](https://github.com/sysid/sse-starlette) | ASGI `EventSourceResponse`, ping/disconnect handling and send timeout. Application supplies events and persistence. It can be a host transport alongside ui-stream. | Installed **3.2.0**, encoder only; same JSON, LF and ID bytes. No ASGI/uvicorn throughput comparison |
-| Django EventStream | [Official metadata: 5.3.4](https://raw.githubusercontent.com/fanout/django-eventstream/master/pyproject.toml), [official storage setup](https://github.com/fanout/django-eventstream#event-storage) | Django channels/views and permissions; optional database storage writes events before publishing, with historical recovery. This differs from a host-owned latest snapshot/result transaction. | Not installed; no measurement or dependency installation |
-| Starlette `StreamingResponse` | [Official response documentation](https://github.com/Kludex/starlette/blob/main/docs/responses.md), [1.8.0 release](https://github.com/Kludex/starlette/releases/tag/1.8.0) | ASGI streaming response accepting sync/async iterables; SSE framing and persistence remain application choices. The docs link to sse-starlette for SSE. | Installed 0.52.1, but no independent framework test; encoding adapter does not benchmark `StreamingResponse` |
-
-For an application-level comparison, first fix an equivalent host server, event validation, encoding, producer pace, per-event flushing, queue bounds, reconnect behavior, archive retention and commit-before-terminal semantics. Without that contract, comparing these packages' throughput would conflate different responsibilities.
+[Choosing a solution](comparison.en.md) compares StreamingResponse, sse-starlette, current FastAPI native SSE, Django EventStream, and LangGraph by responsibility and recovery boundary. Only the installed sse-starlette 3.2.0 participates in equal-byte encoding measurements. This is not an ASGI network test or a framework capacity ranking.
 
 ## Limits of this baseline
 

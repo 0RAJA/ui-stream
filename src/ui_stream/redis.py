@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Redis live tail with injected connection/key mapping and atomic sliding TTL.
 
-No consumer groups, ORM or current pointer. Backend errors are normalized
-to LiveUnavailable for the runtime error policy. Dirty entries advance the read cursor.
+No consumer groups, ORM or current pointer. Backend/parser errors become
+LiveUnavailable. Raw-byte dirty entries advance the real read cursor; predecoded
+parser failures end the read because no entry IDs are available.
 """
 
 import logging
@@ -55,7 +56,7 @@ class RedisLiveStore:
         return self._ttl_seconds
 
     def physical_key(self, logical_key: str) -> str:
-        """通过 Django cache make_key() 继承 REDIS_KEY_PREFIX 与版本号。"""
+        """Apply the host-injected namespace/key mapping without importing its cache layer."""
 
         return self._physical_key(logical_key)
 
@@ -78,7 +79,8 @@ class RedisLiveStore:
     def read(self, *, redis_key: str, after_id: str, block_ms: int) -> ReadBatch:
         try:
             return self._read(redis_key=redis_key, after_id=after_id, block_ms=block_ms)
-        except (RedisError, OSError):
+        except (RedisError, OSError, UnicodeDecodeError):
+            # decode_responses may fail before XREAD returns IDs; do not invent a cursor.
             raise LiveUnavailable("Redis read unavailable") from None
 
     def _read(self, *, redis_key: str, after_id: str, block_ms: int) -> ReadBatch:

@@ -26,6 +26,7 @@ class Element {
 async function main() {
   const elements = new Map();
   const requests = [];
+  const deferred = [];
   const streams = [];
   const timers = new Map();
   const storage = new Map();
@@ -42,7 +43,7 @@ async function main() {
     constructor(url) { this.url = url; this.listeners = new Map(); this.closed = false; streams.push(this); }
     addEventListener(name, fn) { this.listeners.set(name, fn); }
     close() { this.closed = true; }
-    emit(name) { const listener = this.listeners.get(name); if (listener) listener({data: "{}"}); }
+    emit(name, data = {}) { const listener = this.listeners.get(name); if (listener) listener({data: JSON.stringify(data)}); }
   }
   const context = vm.createContext({
     document: {
@@ -66,6 +67,10 @@ async function main() {
     async fetch(url, options = {}) {
       const method = options.method || "GET";
       requests.push({url, method, body: options.body});
+      if (["out_of_order_snapshot", "recovered_snapshot_notice", "terminal_state_snapshot", "terminal_state_error"].includes(scenario) && requests.length > 1) {
+        return new Promise((resolve, reject) => deferred.push(data => data instanceof Error ? reject(data) :
+          resolve({ok: true, status: 200, json: async () => data})));
+      }
       const data = method === "POST" ? job(newId) : job(url.endsWith(oldId) ? oldId : newId);
       return {ok: true, status: method === "POST" ? 200 : 200, json: async () => data};
     },
@@ -91,6 +96,49 @@ async function main() {
     assert.equal(elements.get("job-status").textContent, "运行中");
     assert.equal(timers.size, 1, "only one controlled snapshot poll may remain");
     assert.ok([...timers.values()].every(item => item.delay >= 1000));
+  } else if (["out_of_order_snapshot", "recovered_snapshot_notice", "terminal_state_snapshot", "terminal_state_error"].includes(scenario)) {
+    const firePoll = async () => {
+      const [id, timer] = [...timers.entries()][0];
+      timers.delete(id);
+      timer.fn();
+      await flush();
+    };
+    const terminal = {...job(newId), status: "DONE", cursor: 12, result: {processed: 12},
+      snapshot: {step: 12, total: 12, message: "Synthetic item 12"}};
+    await firePoll();
+    if (scenario.startsWith("terminal_state_")) {
+      streams[0].emit("state", terminal);
+      await flush();
+      assert.equal(elements.get("job-status").textContent, "已完成");
+      deferred[0](scenario === "terminal_state_error" ? new Error("Obsolete snapshot error") : job(newId));
+      await flush();
+      assert.equal(elements.get("job-status").textContent, "已完成");
+      assert.match(elements.get("result").textContent, /processed/);
+      assert.equal(elements.get("notice").textContent, "");
+      assert.equal(timers.size, 0);
+    } else if (scenario === "out_of_order_snapshot") {
+      streams[0].emit("finished");
+      await flush();
+      assert.equal(deferred.length, 2);
+      deferred[1](terminal);
+      await flush();
+      assert.equal(elements.get("job-status").textContent, "已完成");
+      deferred[0](job(newId));
+      await flush();
+      assert.equal(elements.get("job-status").textContent, "已完成", "older RUNNING must not replace terminal");
+      assert.match(elements.get("result").textContent, /processed/);
+      assert.equal(timers.size, 0, "stale snapshots must not restart polling after terminal");
+    } else {
+      deferred[0](new Error("Synthetic read outage"));
+      await flush();
+      assert.match(elements.get("notice").textContent, /Synthetic read outage/);
+      await firePoll();
+      deferred[1](terminal);
+      await flush();
+      assert.equal(elements.get("job-status").textContent, "已完成");
+      assert.equal(elements.get("notice").textContent, "");
+      assert.equal(elements.get("notice").hidden, true);
+    }
   } else {
     throw new Error(`Unknown client contract: ${scenario}`);
   }

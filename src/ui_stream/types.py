@@ -12,6 +12,7 @@ from typing import Any, Callable, Generic, Protocol, TypeVar
 from uuid import UUID
 
 EventT = TypeVar("EventT")
+_ArchiveEventT = TypeVar("_ArchiveEventT", contravariant=True)
 
 
 class Integrity(StrEnum):
@@ -48,6 +49,8 @@ class Binding:
 
 @dataclass(frozen=True, slots=True)
 class Checkpoint:
+    """A handled batch; exhausted capacity stops future buffering, not necessarily loss yet."""
+
     archive_status: Integrity
     capacity_exhausted: bool = False
 
@@ -86,6 +89,8 @@ AfterClose = Callable[[Summary], None]
 
 
 class EventCodec(Protocol[EventT]):
+    """Build immutable domain events and encode without performing transport/storage I/O."""
+
     def business(self, data: Any) -> EventT:
         ...
 
@@ -97,13 +102,20 @@ class EventCodec(Protocol[EventT]):
 
 
 class LivePublisher(Protocol[EventT]):
+    """Publish synchronously; return an immutable event with an optional transport receipt."""
+
     def publish(self, event: EventT) -> EventT:
         ...
 
 
-class ArchiveStore(Protocol[EventT]):
+class ArchiveStore(Protocol[_ArchiveEventT]):
+    """Handle each checkpoint batch; atomically commit tail, terminal and result with fencing.
+
+    Return only after successful storage work; report dropped events through integrity.
+    """
+
     def checkpoint(
-        self, *, binding: ExecutionBinding, events: tuple[EventT, ...], archive_status: Integrity
+        self, *, binding: ExecutionBinding, events: tuple[_ArchiveEventT, ...], archive_status: Integrity
     ) -> Checkpoint:
         ...
 
@@ -114,8 +126,8 @@ class ArchiveStore(Protocol[EventT]):
         self,
         *,
         binding: ExecutionBinding,
-        events: tuple[EventT, ...],
-        terminal_event: EventT,
+        events: tuple[_ArchiveEventT, ...],
+        terminal_event: _ArchiveEventT,
         archive_status: Integrity,
         completion: Any,
     ) -> Integrity:

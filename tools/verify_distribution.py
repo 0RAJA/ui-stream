@@ -31,7 +31,16 @@ def consumer_tests(project, package, temporary, env):
         "import ui_stream; "
         "assert ui_stream.__file__.startswith(" + repr(str(package)) + "), ui_stream.__file__; "
         "import unittest; unittest.main(module=None, argv="
-        + repr(["consumer", "tests.test_contract", "tests.test_demo", "tests.test_demo_client", "-v"])
+        + repr(
+            [
+                "consumer",
+                "tests.test_contract",
+                "tests.test_runtime_boundaries",
+                "tests.test_demo",
+                "tests.test_demo_client",
+                "-v",
+            ]
+        )
         + ")"
     )
     run([sys.executable, "-I", "-c", script], cwd=temporary, env=env)

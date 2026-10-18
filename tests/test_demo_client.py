@@ -37,6 +37,18 @@ class DemoClientContractTest(unittest.TestCase):
     def test_closed_producer_does_not_immediately_reopen_sse(self):
         self.run_client("closed_producer")
 
+    def test_older_snapshot_cannot_replace_a_confirmed_terminal_result(self):
+        self.run_client("out_of_order_snapshot")
+
+    def test_terminal_sse_state_invalidates_older_snapshot(self):
+        self.run_client("terminal_state_snapshot")
+
+    def test_terminal_sse_state_ignores_older_snapshot_error(self):
+        self.run_client("terminal_state_error")
+
+    def test_successful_recovery_clears_transient_read_error(self):
+        self.run_client("recovered_snapshot_notice")
+
     def test_directory_consumer_uses_selected_client_asset(self):
         with tempfile.TemporaryDirectory() as folder:
             asset = Path(folder) / "static/demo.js"

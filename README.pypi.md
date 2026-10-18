@@ -53,7 +53,7 @@ assert store.snapshot.latest == 9 and store.snapshot.result == 13
 ![组件边界：任务调用 Runtime，宿主实现三个端口，UI读取实时尾流和快照](https://raw.githubusercontent.com/0RAJA/ui-stream/main/docs/diagrams/architecture.png)
 
 [架构与完成顺序](https://github.com/0RAJA/ui-stream/blob/main/docs/architecture.md) · [API 契约](https://github.com/0RAJA/ui-stream/blob/main/docs/api.md) · [Demo](https://github.com/0RAJA/ui-stream/blob/main/demos/sqlite/README.md) ·
-[性能与比较](https://github.com/0RAJA/ui-stream/blob/main/docs/performance.md) · [贡献](https://github.com/0RAJA/ui-stream/blob/main/CONTRIBUTING.md) · [安全](https://github.com/0RAJA/ui-stream/blob/main/SECURITY.md) · [发布](https://github.com/0RAJA/ui-stream/blob/main/docs/releasing.md)
+[性能图表](https://github.com/0RAJA/ui-stream/blob/main/docs/performance.md) · [方案选型](https://github.com/0RAJA/ui-stream/blob/main/docs/comparison.md) · [贡献](https://github.com/0RAJA/ui-stream/blob/main/CONTRIBUTING.md) · [安全](https://github.com/0RAJA/ui-stream/blob/main/SECURITY.md) · [发布](https://github.com/0RAJA/ui-stream/blob/main/docs/releasing.md)
 
 CI 的源码矩阵覆盖 Python 3.11–3.14 / Linux、macOS；wheel、sdist 与 README 验证在 Linux 执行。
 维护者：`raja <rajawwang@foxmail.com>`（GitHub [0RAJA](https://github.com/0RAJA)）。

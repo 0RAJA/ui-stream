@@ -20,3 +20,5 @@ python -m tools.verify_distribution --dist ./dist
 
 文档中文优先，英文互链；两版命令/API/版本/行为保持一致。README 只留用途、起步、边界与入口，细节放 docs。
 `README.pypi.md` 由中文 README 转换绝对链接生成：修改后执行 `python -m tools.check_docs --write-pypi`。静态图保留同名 SVG；不要仅依赖 Mermaid。
+
+发布扫描面向干净 clone/export；虚拟环境和 Demo SQLite 数据放在仓库外。开发目录中的 `.venv/` 或 `demo.sqlite3` 会被严格白名单拒绝。保留这道门禁，发布验证前使用干净输入，不通过放宽规则掩盖额外文件。

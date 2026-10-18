@@ -1,0 +1,672 @@
+{
+  "schemaVersion": 1,
+  "inputFile": "baseline-2026-10-18.json",
+  "sourceSHA256": "9245804b594e5f4b717645c1b9eba4c85efb66edf08bf9c2f9ac58696e003ccd",
+  "benchmarkSourceSHA256": "5b77fed766440907f6b531ed7747f163076d3c28948bcddf12bd67f08e7bf69a",
+  "recordedAtUTC": "2026-10-18T12:46:49+00:00",
+  "sourceSampleCount": 36,
+  "workload": {
+    "events": 512,
+    "http_events": 64,
+    "connections": [
+      1,
+      4,
+      8
+    ],
+    "repeats": 3,
+    "payload_bytes": 128
+  },
+  "sqliteSettings": {
+    "journal_mode": "wal",
+    "synchronous": 1,
+    "checkpoint_events": 16
+  },
+  "rangeMeaning": "minimum and maximum of the per-run metric; not a confidence interval",
+  "percentileMeaning": "per-run nearest-rank p95 from the source summary; no pooled percentile",
+  "series": [
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        3.023041,
+        2.783875,
+        2.7105
+      ],
+      "median": 2.783875,
+      "min": 2.7105,
+      "max": 3.023041
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        0.647041,
+        0.451875,
+        0.4295
+      ],
+      "median": 0.451875,
+      "min": 0.4295,
+      "max": 0.647041
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        4403.732851675053,
+        3910.5660868254436,
+        4208.92249479672
+      ],
+      "median": 4208.92249479672,
+      "min": 3910.5660868254436,
+      "max": 4403.732851675053
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        4403.732851675053,
+        3910.5660868254436,
+        4208.92249479672
+      ],
+      "median": 4208.92249479672,
+      "min": 3910.5660868254436,
+      "max": 4403.732851675053
+    },
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        4.123292,
+        4.452291,
+        3.979208
+      ],
+      "median": 4.123292,
+      "min": 3.979208,
+      "max": 4.452291
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        1.499542,
+        1.638166,
+        1.550667
+      ],
+      "median": 1.550667,
+      "min": 1.499542,
+      "max": 1.638166
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        3438.764787091565,
+        3158.7455200104555,
+        3380.0659133978525
+      ],
+      "median": 3380.0659133978525,
+      "min": 3158.7455200104555,
+      "max": 3438.764787091565
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        13755.05914836626,
+        12634.982080041822,
+        13520.26365359141
+      ],
+      "median": 13520.26365359141,
+      "min": 12634.982080041822,
+      "max": 13755.05914836626
+    },
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        6.739458,
+        5.760042,
+        6.456125
+      ],
+      "median": 6.456125,
+      "min": 5.760042,
+      "max": 6.739458
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        2.623209,
+        2.666208,
+        2.792959
+      ],
+      "median": 2.666208,
+      "min": 2.623209,
+      "max": 2.792959
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        2585.4451235636743,
+        2714.543523209432,
+        2573.230728974554
+      ],
+      "median": 2585.4451235636743,
+      "min": 2573.230728974554,
+      "max": 2714.543523209432
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        20683.560988509395,
+        21716.348185675455,
+        20585.845831796432
+      ],
+      "median": 20683.560988509395,
+      "min": 20585.845831796432,
+      "max": 21716.348185675455
+    },
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        2.737125,
+        2.867209,
+        2.993208
+      ],
+      "median": 2.867209,
+      "min": 2.737125,
+      "max": 2.993208
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        0.466416,
+        0.41925,
+        0.659792
+      ],
+      "median": 0.466416,
+      "min": 0.41925,
+      "max": 0.659792
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        4266.109797134481,
+        4287.843755261402,
+        4044.29769822588
+      ],
+      "median": 4266.109797134481,
+      "min": 4044.29769822588,
+      "max": 4287.843755261402
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        4266.109797134481,
+        4287.843755261402,
+        4044.29769822588
+      ],
+      "median": 4266.109797134481,
+      "min": 4044.29769822588,
+      "max": 4287.843755261402
+    },
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        5.471958,
+        4.946042,
+        5.192041
+      ],
+      "median": 5.192041,
+      "min": 4.946042,
+      "max": 5.471958
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        1.708958,
+        1.564958,
+        1.599458
+      ],
+      "median": 1.599458,
+      "min": 1.564958,
+      "max": 1.708958
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        3008.7795717782683,
+        3182.0084469397357,
+        3095.7007343534215
+      ],
+      "median": 3095.7007343534215,
+      "min": 3008.7795717782683,
+      "max": 3182.0084469397357
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 4,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        12035.118287113073,
+        12728.033787758943,
+        12382.802937413686
+      ],
+      "median": 12382.802937413686,
+      "min": 12035.118287113073,
+      "max": 12728.033787758943
+    },
+    {
+      "metric": "first_event_p95",
+      "unit": "ms",
+      "sourceField": "summary.first_event_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        5.479417,
+        6.2015,
+        6.865708
+      ],
+      "median": 6.2015,
+      "min": 5.479417,
+      "max": 6.865708
+    },
+    {
+      "metric": "delivery_p95",
+      "unit": "ms",
+      "sourceField": "summary.delivery_ns.p95 / 1e+06",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        2.643125,
+        2.834125,
+        2.672542
+      ],
+      "median": 2.672542,
+      "min": 2.643125,
+      "max": 2.834125
+    },
+    {
+      "metric": "unique_producer_events_per_second",
+      "unit": "events/s",
+      "sourceField": "summary.producer_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        2805.935535735518,
+        2575.003619087118,
+        2494.174543581647
+      ],
+      "median": 2575.003619087118,
+      "min": 2494.174543581647,
+      "max": 2805.935535735518
+    },
+    {
+      "metric": "aggregate_delivered_frames_per_second",
+      "unit": "frames/s",
+      "sourceField": "summary.delivered_events_per_second",
+      "layer": "http",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 8,
+      "eventsPerRun": 64,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        22447.484285884144,
+        20600.028952696943,
+        19953.396348653176
+      ],
+      "median": 20600.028952696943,
+      "min": 19953.396348653176,
+      "max": 22447.484285884144
+    },
+    {
+      "metric": "core_producer_interval",
+      "unit": "ms",
+      "sourceField": "raw.elapsed_ns / 1000000",
+      "layer": "core",
+      "implementation": "raw",
+      "persistence": "none",
+      "readers": 1,
+      "eventsPerRun": 512,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        5.652167,
+        5.29975,
+        5.346083
+      ],
+      "median": 5.346083,
+      "min": 5.29975,
+      "max": 5.652167
+    },
+    {
+      "metric": "core_producer_interval",
+      "unit": "ms",
+      "sourceField": "raw.elapsed_ns / 1000000",
+      "layer": "core",
+      "implementation": "runtime",
+      "persistence": "none",
+      "readers": 1,
+      "eventsPerRun": 512,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        6.13125,
+        5.670375,
+        5.797209
+      ],
+      "median": 5.797209,
+      "min": 5.670375,
+      "max": 6.13125
+    },
+    {
+      "metric": "core_producer_interval",
+      "unit": "ms",
+      "sourceField": "raw.elapsed_ns / 1000000",
+      "layer": "core",
+      "implementation": "raw",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 512,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        72.643292,
+        76.869791,
+        80.145375
+      ],
+      "median": 76.869791,
+      "min": 72.643292,
+      "max": 80.145375
+    },
+    {
+      "metric": "core_producer_interval",
+      "unit": "ms",
+      "sourceField": "raw.elapsed_ns / 1000000",
+      "layer": "core",
+      "implementation": "runtime",
+      "persistence": "sqlite",
+      "readers": 1,
+      "eventsPerRun": 512,
+      "repeats": [
+        1,
+        2,
+        3
+      ],
+      "rawValues": [
+        72.805541,
+        75.68225,
+        78.822458
+      ],
+      "median": 75.68225,
+      "min": 72.805541,
+      "max": 78.822458
+    }
+  ]
+}

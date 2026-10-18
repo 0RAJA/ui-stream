@@ -6,7 +6,7 @@
 | --- | --- |
 | 先运行、看边界 | [README](../README.md) / [SQLite Demo](../demos/sqlite/README.md) |
 | 接入自己的任务、通道和存储 | [架构与时序](architecture.md) / [API](api.md) |
-| 看性能数据与相近方案 | [性能与比较](performance.md) |
+| 看性能数据与相近方案 | [性能图表与验收](performance.md) / [方案选型](comparison.md) |
 | 修改代码或报告安全问题 | [贡献](../CONTRIBUTING.md) / [安全](../SECURITY.md) |
 | 构建和发布 | [发布流程](releasing.md) |
 | 查来源与版本变化 | [许可证](license.md) / [来源清单](../PROVENANCE.md) / [变更](../CHANGELOG.md) |

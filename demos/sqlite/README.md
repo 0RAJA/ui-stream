@@ -38,3 +38,5 @@ PYTHONPATH=src python -m unittest tests.test_demo tests.test_contract tests.test
 ```
 
 Demo在 -I -S 子进程、临时SQLite与真实localhost HTTP验证；Node测试是真实demo.js的受控状态单测，不能代替浏览器操作验证。
+
+客户端同时校验连接 generation 和快照读取序列；旧轮询响应或错误不能覆盖较新的已确认终态。成功读取会清除瞬时网络提示，持久 warning 保留。

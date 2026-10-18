@@ -29,3 +29,14 @@ Stores enforce their own durable snapshot cap. Activity updates are driven by `s
 `finish_retry` checkpoints and closes without constructing a terminal event or committing a final result.
 
 For host adoption, pin the extra/version, remove embedded `ui_stream` to prevent shadowing, regenerate dependency locks, and verify the import location. Keep models, permissions, transactions, and task exceptions in the host.
+
+## Finite archive budgets and truthful integrity
+
+`max_events` is the cumulative archive-event budget for one execution, not the pending batch size. With a budget of 2 and a checkpoint per event, sending 1–4 can leave the latest snapshot at 2 while live progress and the final business result reach 4, with TRUNCATED integrity. This policy still applies when the store retains only a constant-size latest value. Budget finite tasks explicitly; long tasks need explicit execution rotation or a policy/implementation suitable for an unlimited latest value. The defaults are not an unlimited snapshot service.
+
+`Checkpoint(capacity_exhausted=True)` stops future archive buffering. A batch that exactly fills storage without dropping anything may remain COMPLETE; the next actually discarded event raises TRUNCATED. `Summary` flags also reflect integrity supplied at construction.
+
+## Optional Redis reader
+
+`normalize_cursor` accepts two ASCII uint64 Redis stream-ID components. The reader does not provide authorization, initial snapshots, or replay on reconnect.
+With `decode_responses=False`, the adapter can skip dirty payloads individually and advance real entry IDs. Normal string responses are also supported. A `decode_responses=True` client can fail on invalid UTF-8 before returning any entry, however; this becomes `LiveUnavailable` and ends the current reader so the host can reload a snapshot. No unknown cursor is guessed, and skipping that entry is not promised.
