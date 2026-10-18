@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 BOOTSTRAP = """
+import faulthandler
 import json
 import sqlite3
 import sys
@@ -28,6 +29,8 @@ from ui_stream.demo.channel import MemoryChannel
 from ui_stream.demo.constants import JobStatus, Scenario
 from ui_stream.demo.events import DemoCodec, DemoEvent
 from ui_stream.demo.storage import DatabaseInUse, SQLiteArchiveStore, SQLiteRepository
+
+faulthandler.dump_traceback_later(10, exit=True)
 
 @contextmanager
 def repository():

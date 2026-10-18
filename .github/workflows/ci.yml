@@ -36,6 +36,12 @@ jobs:
           node-version: '24'
       - name: Install declared optional profiles
         run: python -m pip install '.[redis]'
+      - name: Diagnose macOS loopback bootstrap
+        if: runner.os == 'macOS'
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m unittest tests.test_demo.StandaloneDemoTest.test_static_demo_assets_are_served_without_external_dependencies -v
       - name: Test source
         env:
           PYTHONPATH: src
