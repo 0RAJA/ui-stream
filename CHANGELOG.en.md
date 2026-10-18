@@ -5,9 +5,8 @@
 ## 0.1.0a1 — Initial alpha
 
 - Three-port synchronous Runtime: bounded buffering, checkpoints, host-atomic results, frozen summary.
-- Optional JSON/Redis profiles and standard-library Counter/SQLite/SSE browser examples.
-- Direct loopback binding avoids macOS reverse-DNS stalls; regression and timeout stack diagnostics added.
-- Source/wheel/sdist/README/sensitive-content CI; Release revalidates; OIDC publishing activates only after explicit approval.
-- Chinese-first bilingual illustrated docs and bounded benchmarks. Alpha APIs may change; pin and validate upgrades.
+- Optional JSON/Redis profiles, standard-library Counter, and SQLite/SSE browser Demo.
+- Source, wheel/sdist, README, and sensitive-content CI; Release verification and a separate publishing template.
+- Bilingual illustrated docs and reproducible bounded performance benchmarks.
 
-GitHub Releases / PyPI provide the actual publication status.
+Alpha APIs may change; pin versions and validate adapter contracts before upgrades. GitHub Releases / PyPI provide the actual publication status.
