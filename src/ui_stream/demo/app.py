@@ -10,6 +10,7 @@ import re
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
@@ -32,6 +33,12 @@ class DemoHTTPServer(ThreadingHTTPServer):
     def __init__(self, service: DemoService, port: int):
         self.service = service
         super().__init__(("127.0.0.1", port), DemoHandler)
+
+    def server_bind(self):
+        # The fixed loopback host needs no reverse DNS, which may stall on offline runners.
+        TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
 
 
 class DemoHandler(BaseHTTPRequestHandler):

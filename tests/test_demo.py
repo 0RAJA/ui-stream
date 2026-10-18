@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import uuid4
+from unittest.mock import patch
 
 from ui_stream import Integrity, StreamRuntime, StreamPolicy
 from ui_stream.exceptions import ArchiveUnavailable, StaleExecution
@@ -478,5 +479,22 @@ class StandaloneDemoTest(unittest.TestCase):
                     finally:
                         lock.rollback()
                         lock.close()
+            """
+        )
+
+    def test_loopback_server_bind_does_not_require_reverse_dns(self):
+        self.run_demo(
+            r"""
+            with tempfile.TemporaryDirectory() as folder:
+                service=DemoService(Path(folder)/"demo.sqlite3")
+                try:
+                    with patch("socket.getfqdn", side_effect=AssertionError("loopback bind must not resolve DNS")):
+                        server=make_server(service,port=0)
+                    try:
+                        assert server.server_name == "127.0.0.1" and server.server_port > 0
+                    finally:
+                        server.server_close()
+                finally:
+                    service.close()
             """
         )
