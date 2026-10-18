@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ui_stream.demo.constants import TOTAL_STEPS, EventKind, JobStatus
+from demos.sqlite.constants import TOTAL_STEPS, EventKind, JobStatus
 from ui_stream.exceptions import InvalidEvent
 from ui_stream.types import EncodingTarget
 

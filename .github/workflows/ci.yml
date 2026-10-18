@@ -73,16 +73,41 @@ jobs:
         run: |
           python -m tools.verify_distribution --check-tag "$RELEASE_TAG"
           git merge-base --is-ancestor HEAD origin/main
+      - name: Bounded synthetic benchmark smoke
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m benchmarks.run --smoke --output "$RUNNER_TEMP/benchmark-smoke.json"
+      - name: Check bilingual docs and static README links
+        run: python -m tools.check_docs
       - name: Build distributions
         run: python -m build --no-isolation
       - name: Validate PyPI README and metadata
-        run: python -m twine check --strict dist/*
+        run: |
+          python -m twine check --strict dist/*
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from readme_renderer.markdown import render
+
+          rendered = render(Path("README.pypi.md").read_text())
+          assert rendered and "<img " in rendered and "<table" in rendered
+          preview = Path(os.environ["RUNNER_TEMP"]) / "pypi-readme.html"
+          preview.write_text('<!doctype html><meta charset="utf-8">' + rendered)
+          PY
       - name: Scan source and actual archives
         run: python tools/check_release.py --project . --dist dist
       - name: Verify wheel, directory consumer and sdist rebuild
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -m tools.verify_distribution --dist dist
+      - name: Upload PyPI renderer preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: readme-preview
+          path: ${{ runner.temp }}/pypi-readme.html
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload verified distributions
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

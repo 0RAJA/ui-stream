@@ -1,41 +1,31 @@
-# Public API and compatibility
+# API 契约
 
-The initial alpha API may change between alpha releases; consumers should pin an
-exact version, run their adapter contracts, and review the changelog before upgrading.
-No stable 1.x compatibility guarantee is made for this candidate.
+[English](api.en.md) · [文档导航](README.md)
 
-- `ui_stream`: StreamRuntime, StreamPolicy, Integrity.
-- `ui_stream.types`: Binding, ExecutionBinding, EventCodec, LivePublisher, ArchiveStore,
-  EncodingTarget, Checkpoint, Summary, AfterClose and ReadBatch.
-- `ui_stream.exceptions`: InvalidEvent, InvalidCursor, ClosedStream, StaleExecution,
-  LiveUnavailable and ArchiveUnavailable.
-- Optional `ui_stream.codec`: Event, ControlEvent, JsonEventCodec, serialize_data,
-  serialize_event. Default terminal statuses are SUCCESS and FAILED.
-- Optional `ui_stream.redis`: RedisLiveStore and BoundRedisPublisher.
-- Optional `ui_stream.reader`: normalize_cursor and iter_live.
-- Optional `ui_stream.sse`: encode_sse_event.
-- Optional `ui_stream.archive`: merge_archive_status and fit_archive_events.
+alpha 阶段请固定精确版本 `0.1.0a1`；升级前跑自己的适配器契约。以下划线开头的名称不属于公开 API。
+签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准。
 
-The type Protocols are the authoritative signatures. See
-[types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py).
-Names beginning `_` are private and outside this compatibility contract. Demo HTTP
-routes/schema are examples, not a production supported service API.
+| 入口 | 方法 / 类型 |
+| --- | --- |
+| `StreamRuntime` | `send` / `finish` / `finish_retry` |
+| `EventCodec` | `business` / `terminal` / `encode` |
+| `LivePublisher` | `publish` |
+| `ArchiveStore` | `checkpoint` / `touch_activity` / `commit` |
+| `after_close` | `Summary` |
 
-## Defaults and limits
+公开模块：`ui_stream`、`ui_stream.types`、`ui_stream.exceptions`；可选 profile 位于 `codec`、`redis`、`reader`、`sse`、`archive`。
+默认 `JsonEventCodec` 使用 SUCCESS/FAILED，自定义 codec 可用其他终态与事件类型。
 
-StreamPolicy defaults: max_event_bytes 256 KiB; max_events 10,000;
-max_live_bytes 10 MiB; max_archive_bytes 10 MiB; activity interval 60s;
-checkpoint_event_count 20 and checkpoint_bytes 256 KiB.
+| `StreamPolicy` | 默认值 |
+| --- | --- |
+| `max_event_bytes` | 256 KiB |
+| `max_events` | 10000 |
+| `max_live_bytes` / `max_archive_bytes` | 各 10 MiB |
+| `activity_interval_seconds` | 60 |
+| `checkpoint_event_count` / `checkpoint_bytes` | 20 / 256 KiB |
 
-Oversized single events return None. Event count stops new archive buffering; live
-business tail may continue. The live byte cap stops new business publishing; terminal
-publication is still attempted. Stores impose their own persistent snapshot cap.
-Integrity advances COMPLETE -> DEGRADED -> TRUNCATED and does not improve later.
+超单条限制的 `send` 返回 None。事件数限制停止新的归档缓冲；live 字节限制停止新的业务实时发布，终态仍会尝试。
+Store 自行限制持久快照容量；活动更新由 `send` 驱动，不是后台定时器。
+`finish_retry` checkpoint 后关闭，不构造终态或提交最终结果。
 
-## Host adoption
-
-Use a real version dependency such as `ui-stream[redis]==0.1.0a1` only after that
-name/version is approved and available from the selected source. Remove any embedded
-`ui_stream` package so it cannot shadow the dependency. Keep application-specific
-adapters, models, permissions, task errors and telemetry in the application. Re-lock
-and export application dependencies with that application's package manager.
+宿主迁移：声明精确版本 extra 依赖，移除同名内嵌 `ui_stream` 防止遮蔽，重新生成依赖锁并验证实际导入位置；业务模型、权限、事务和任务异常留在宿主。

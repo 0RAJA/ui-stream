@@ -1,40 +1,13 @@
-# Source provenance
+# 来源清单
 
-This is a source-only export; it contains no parent Git history, credentials,
-application models, configuration, data, or deployment materials.
-The origin is BlueKing - Audit Center (bk-audit), repository-level MIT declaration.
-The original declaration is retained in [LICENSE.upstream](LICENSE.upstream) and
-[NOTICE](NOTICE); no different upstream license was found within the selected files.
-No third-party library source, fonts, or images are vendored.
+[English](PROVENANCE.en.md) · [许可证](docs/license.md)
 
-## Extracted or derived
-
-The following modules were extracted/generalized from the host streaming code.
-New contracts and implementations were added during that refactoring; the whole
-module is conservatively treated as derived rather than claiming a clean-room origin.
-The upstream copyright is retained at the top of each of these files.
-
-| Candidate module | Origin responsibilities |
+| 类别 | 文件与来源 |
 | --- | --- |
-| `src/ui_stream/__init__.py` | extraction package surface and runtime exports |
-| `src/ui_stream/runtime.py` | streaming runtime buffering, checkpoints, completion ordering |
-| `src/ui_stream/types.py` | streaming types and generalized host ports |
-| `src/ui_stream/exceptions.py` | generalized streaming exceptions |
-| `src/ui_stream/codec.py` | stream event schema and serialization |
-| `src/ui_stream/archive.py` | archive integrity and bounded prefix helpers |
-| `src/ui_stream/redis.py` | Redis live store and bound publisher |
-| `src/ui_stream/reader.py` | Redis live iteration and cursors |
-| `src/ui_stream/sse.py` | SSE encoding helpers |
+| 抽取 / 衍生 | `src/ui_stream/` 下 `__init__`, `runtime`, `types`, `exceptions`, `codec`, `archive`, `redis`, `reader`, `sse`：来自 BlueKing - Audit Center (bk-audit) 的流式模块；包含提炼时新增/泛化实现，整体保守视为衍生 |
+| 本轮新增 | `examples/counter.py`、`demos/sqlite/`、独立测试、基准、打包工具、图文文档与流水线 |
+| 第三方源码 | 未 vendor 库、字体或图片；依赖按 metadata 声明 |
 
-## Newly generated alongside the extraction
-
-- `src/ui_stream/example.py`: domain counter consumer using public ports.
-- Every file under `src/ui_stream/demo/`: synthetic SQLite/HTTP/browser demonstration.
-- Every file under `tests/`: independent contracts, synthetic fixtures, release checks.
-- `tools/`, metadata, documentation, allowlist and packaging configuration: local
-  project and release preparation. The MIT text is the standard license text.
-
-Newly generated is a provenance category, not a determination of ownership.
-The maintainer authorized public distribution of this extraction and the new
-material. Existing upstream ownership is unchanged. The preparation record retains exact source
-hashes and the private source baseline separately; those records are not bundled here.
+9个衍生模块保留 `THL A29 Limited, a Tencent company` 原版权。`LICENSE.upstream` 原样保留根 MIT 声明，`LICENSE` 为完整 MIT 文本，`NOTICE` 记录提炼关系。
+维护者已确认允许公开本次提炼与新增材料；此清单记录技术来源，不重新分配版权，也不表示上游背书或商标许可。
+独立仓库从审阅文件导入，不携带父项目历史、配置、环境、数据或内部交付材料。来源核查的私有执行记录不随包分发。

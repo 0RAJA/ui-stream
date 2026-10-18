@@ -1,71 +1,52 @@
-# Releases and PyPI publishing
+# 发布流程
 
-Repository: [0RAJA/ui-stream](https://github.com/0RAJA/ui-stream).
-Maintainer: [raja (@0RAJA)](https://github.com/0RAJA). Initial alpha version: 0.1.0a1.
-Upstream MIT/attribution is preserved; the maintainer has authorized public distribution.
+[English](releasing.en.md) · [文档导航](README.md)
 
-## CI and release artifact gates
+准备期仓库保持私有，不发布 PyPI 或公开 Release。CI、双语文档、安全与发布配置就绪后再恢复 public。
 
-Pushes to main and pull requests run `.github/workflows/ci.yml` with read-only
-repository permissions. It tests Python 3.11–3.14 on Linux/macOS and installs only
-the declared optional profiles plus ephemeral CI tools. A subsequent Linux job
-builds wheel/sdist, validates README/metadata with Twine, scans source and actual
-archives, verifies isolated wheel and directory consumers, rebuilds from sdist,
-and uploads the verified distributions as a run artifact.
-
-A published GitHub Release triggers `.github/workflows/release.yml`, which repeats
-the same checks against the release tag. The tag must equal `v` plus project.version
-and the tag commit must be reachable from main. Do not put event values directly
-into executable shell source; the workflow passes the tag through a quoted env value.
-
-## Pending publishing activation
-
-The active Release workflow currently validates artifacts only. The ready
-[publishing job](pypi-publish-job.yml) is not active. No publishing secret or PyPI
-Trusted Publisher has been created by this repository preparation.
-
-Before activation, the maintainer must explicitly approve this exact configuration:
-
-| Setting | Value |
+| 阶段 | 必需检查 |
 | --- | --- |
-| PyPI project | ui-stream |
-| GitHub owner | 0RAJA |
-| GitHub repository | ui-stream |
-| Workflow filename | release.yml |
-| GitHub environment | pypi |
-| OIDC permission | id-token: write, publisher job only |
-| Account | Maintainer's verified PyPI account; not inferred from GitHub username |
+| main / PR | Python 3.11–3.14 × Linux/macOS 源码；Linux 分发、README、文档、扫描与消费者 |
+| GitHub Release | 同一套检查；tag 等于 `v` + metadata 版本，commit 属于 main |
+| PyPI | 只使用本轮验证产物，跟进实际上传，再核对索引与下载消费者 |
 
-After approval, configure the PyPI pending publisher in that PyPI account, set up
-the GitHub `pypi` environment restricted to release tags and the maintainer reviewer,
-and append the reviewed publishing job under jobs in release.yml. The official
-PyPA action exchanges OIDC for short-lived publication credentials; no API token
-needs to be copied into the repository or Actions secrets. Do not add trust, tokens,
-secrets or permanent authorizations without the maintainer's specific confirmation.
+```sh
+python -m tools.check_docs
+python -m unittest discover -s tests -v
+python tools/build_local.py --output ./dist
+python -m twine check --strict dist/*
+python tools/check_release.py --project . --dist dist
+python -m tools.verify_distribution --dist dist --check-tag v0.1.0a1
+```
 
-The pending publisher does not reserve the PyPI name. Recheck availability immediately
-before first publish. If an index denies the name, choose a new name with the maintainer
-and update all metadata and workflow/package references before rebuilding.
+## OIDC 激活前必须确认
 
-## Release procedure
+当前 Release 仅验证；[发布任务模板](pypi-publish-job.yml)未激活。没有配置 PyPI secret/token。
+以下持久信任需用户针对具体配置确认后再操作，PyPI 账号必须实际登录核实：
 
-1. Update project.version and CHANGELOG, review attribution and allowed source files.
-2. Run local tests and `python -m build`; run `python -m twine check --strict dist/*`,
-   `python tools/check_release.py --project . --dist dist` and
-   `python -m tools.verify_distribution --dist dist`.
-3. Merge/push the reviewed commit, wait for the actual CI checks and inspect artifacts.
-4. Tag the verified commit `v0.1.0a1` (or its actual version), then publish a GitHub
-   Release. For alpha versions, mark the Release as a prerelease.
-5. Complete any configured environment approval. Follow Release Actions to completion;
-   do not call an upload successful merely because a Release was created.
-6. Verify PyPI name/version/license/URLs/digests, download the published wheel from PyPI,
-   and run the same isolated consumer checks against the published bytes.
+| 项 | 值 |
+| --- | --- |
+| PyPI project | `ui-stream` |
+| PyPI account | `rajawwang` |
+| GitHub owner / repo | `0RAJA/ui-stream` |
+| Workflow | `release.yml` |
+| Environment | `pypi` |
+| OIDC | `id-token: write` |
 
-Local builds can use `python tools/build_local.py --output ./dist` with existing
-setuptools, without fetching dependencies. CI uses clean hosted runners and declared
-build dependencies. Python package installation is always in a virtual environment
-or the disposable runner, never via copied credentials.
+GitHub `pypi` environment 建议限制 `v*` tag，并由 `0RAJA` 审核。只在 publisher job 授予 OIDC；不复制 API token。
+获准后添加 PyPI pending publisher、配置 environment，再将模板加入 `.github/workflows/release.yml`。
+pending publisher 不保留名称，首次发布前需再次核查。
 
-Official references: [PyPI pending publishers](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/),
-[PyPI OIDC workflow](https://docs.pypi.org/trusted-publishers/using-a-publisher/),
-[packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/).
+发布 alpha 时使用 `v0.1.0a1` 与 prerelease 标记；先等最新必要 CI 全绿，不能只因创建 Release 就称发布成功。
+校验 PyPI 名称/版本/MIT/作者/URL/摘要，并下载真实发布 wheel 重跑消费者。
+Actions 超出免费配额时先报告，不购买资源或扩权。
+
+官方：[pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)、[OIDC 发布](https://docs.pypi.org/trusted-publishers/using-a-publisher/)。
+
+## 分发边界
+
+默认 wheel 只含 `ui_stream` 的九个运行时模块、`py.typed` 和必要元数据/许可证。
+最小 sdist 只保留重建核心所需输入与 PyPI README；Demo、示例、测试、benchmark、CI 和工具均留在仓库。
+`repository-allowlist.txt` 检查整个仓库，`release-allowlist.txt` 与 `MANIFEST.in` 限定 sdist。
+门禁在仓库外安装实际 wheel，加载仓库测试与宿主 Demo，核对核心导入路径，再从 sdist 重建并逐项比较 wheel 内容。
+extras 只增加依赖，不控制产物文件。

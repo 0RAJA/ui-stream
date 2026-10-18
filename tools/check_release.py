@@ -30,7 +30,7 @@ PATTERNS = {
     "email_address": re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}"),
 }
 IP_PATTERN = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
-LEGAL_FILES = {"LICENSE", "LICENSE.upstream", "NOTICE", "PROVENANCE.md"}
+LEGAL_FILES = {"LICENSE", "LICENSE.upstream", "NOTICE", "PROVENANCE.md", "PROVENANCE.en.md"}
 SENSITIVE_SUFFIXES = (".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".db", ".log", ".pyc", ".pem", ".p12")
 
 
@@ -75,16 +75,18 @@ def check_member(name, allowed):
 
 
 def expected_members(project):
-    source = set((project / "release-allowlist.txt").read_text().splitlines())
+    release = set((project / "release-allowlist.txt").read_text().splitlines())
+    repository = project / "repository-allowlist.txt"
+    source = set(repository.read_text().splitlines()) if repository.exists() else release
     metadata = tomllib.loads((project / "pyproject.toml").read_text())["project"]
     stem = metadata["name"].replace("-", "_") + "-" + metadata["version"]
     dist_info = stem + ".dist-info/"
-    wheel = {name.removeprefix("src/") for name in source if name.startswith("src/")}
+    wheel = {name.removeprefix("src/") for name in release if name.startswith("src/")}
     wheel |= {dist_info + name for name in ("METADATA", "WHEEL", "RECORD", "top_level.txt")}
     wheel |= {dist_info + "licenses/" + name for name in ("LICENSE", "LICENSE.upstream", "NOTICE")}
     generated = {"PKG-INFO", "setup.cfg"}
     generated |= {"src/ui_stream.egg-info/" + name for name in ("SOURCES.txt",)}
-    return source, wheel, source | generated
+    return source, wheel, release | generated
 
 
 def check_project(project, dist):
@@ -110,11 +112,13 @@ def check_project(project, dist):
     for missing in source - {p.relative_to(project).as_posix() for p in project.rglob("*") if p.is_file()}:
         report["findings"].append({"file": missing, "category": "missing_source"})
     seen_types = set()
+    counts = {"wheel": 0, "sdist": 0}
     wheel_dirs = {str(parent) for name in wheel_allowed for parent in PurePosixPath(name).parents if str(parent) != "."}
     sdist_dirs = {str(parent) for name in sdist_allowed for parent in PurePosixPath(name).parents if str(parent) != "."}
     for artifact in sorted(dist.iterdir()):
         if artifact.suffix == ".whl":
             seen_types.add("wheel")
+            counts["wheel"] += 1
             with ZipFile(artifact) as archive:
                 entries = []
                 for entry in archive.infolist():
@@ -128,6 +132,7 @@ def check_project(project, dist):
             allowed = wheel_allowed
         elif artifact.name.endswith(".tar.gz"):
             seen_types.add("sdist")
+            counts["sdist"] += 1
             with tarfile.open(artifact, "r:gz") as archive:
                 entries = []
                 for entry in archive.getmembers():
@@ -167,6 +172,8 @@ def check_project(project, dist):
             report["findings"].append({"file": missing, "category": "missing_archive_member"})
     if seen_types != {"wheel", "sdist"}:
         report["findings"].append({"file": "dist", "category": "wheel_and_sdist_required"})
+    if any(count != 1 for count in counts.values()):
+        report["findings"].append({"file": "dist", "category": "exactly_one_wheel_and_sdist_required"})
     return report
 
 

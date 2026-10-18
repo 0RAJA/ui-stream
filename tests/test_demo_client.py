@@ -7,20 +7,14 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from zipfile import ZipFile
 
 
 @unittest.skipUnless(shutil.which("node"), "Existing Node is needed for optional client-state tests")
 class DemoClientContractTest(unittest.TestCase):
     def run_client(self, scenario):
-        root = Path(__file__).resolve().parents[1] / "src"
-        package = os.environ.get("UI_STREAM_TEST_PATH")
-        if package and package.endswith(".whl"):
-            with ZipFile(package) as wheel:
-                source = wheel.read("ui_stream/demo/static/demo.js")
-        else:
-            consumer = Path(package) if package else root
-            source = (consumer / "ui_stream/demo/static/demo.js").read_bytes()
+        root = Path(__file__).resolve().parents[1] / "demos/sqlite"
+        consumer = Path(os.environ.get("UI_STREAM_DEMO_PATH", str(root)))
+        source = (consumer / "static/demo.js").read_bytes()
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "demo.js"
             script.write_bytes(source)
@@ -45,9 +39,9 @@ class DemoClientContractTest(unittest.TestCase):
 
     def test_directory_consumer_uses_selected_client_asset(self):
         with tempfile.TemporaryDirectory() as folder:
-            asset = Path(folder) / "ui_stream/demo/static/demo.js"
+            asset = Path(folder) / "static/demo.js"
             asset.parent.mkdir(parents=True)
             asset.write_text('throw new Error("Selected consumer asset");')
-            with patch.dict(os.environ, {"UI_STREAM_TEST_PATH": folder}):
+            with patch.dict(os.environ, {"UI_STREAM_DEMO_PATH": folder}):
                 with self.assertRaisesRegex(AssertionError, "Selected consumer asset"):
                     self.run_client("closed_producer")

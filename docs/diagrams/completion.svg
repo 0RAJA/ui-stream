@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="590" viewBox="0 0 1040 590" role="img" aria-labelledby="title desc">
+<title id="title">完成：先提交，再关闭与通知</title><desc id="desc">Successful commit precedes close, terminal publication attempt and after_close. A failed commit leaves pending/open and sends no terminal or observer notification.</desc>
+<rect width="1040" height="590" fill="#eef3f8"/>
+<text x="24" y="30" text-anchor="start" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="24" fill="#18324f">完成：先提交，再关闭与通知</text>
+<rect x="12" y="75" width="156" height="68" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="90.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">Host</text>
+<text x="90.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">caller</text>
+<polyline points="90,143 90,518" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="222" y="75" width="156" height="68" rx="10" fill="white" stroke="#285ac8" stroke-width="1.5"/>
+<text x="300.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#285ac8">Runtime</text>
+<text x="300.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">core</text>
+<polyline points="300,143 300,518" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="432" y="75" width="156" height="68" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="510.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">ArchiveStore</text>
+<text x="510.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">host port</text>
+<polyline points="510,143 510,518" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="642" y="75" width="156" height="68" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="720.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">LivePublisher</text>
+<text x="720.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">host port</text>
+<polyline points="720,143 720,518" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="852" y="75" width="156" height="68" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="930.0" y="96.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">Observer</text>
+<text x="930.0" y="128.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">after_close</text>
+<polyline points="930,143 930,518" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<polyline points="90,178 300,178" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="300,178 292,174 292,182" fill="#285ac8"/>
+<text x="195.0" y="161" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">finish(status, completion)</text>
+<polyline points="300,236 510,236" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="510,236 502,232 502,240" fill="#285ac8"/>
+<text x="405.0" y="219" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">commit(tail, terminal, result)</text>
+<polyline points="510,286 300,286" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<polygon points="300,286 308,282 308,290" fill="#285ac8"/>
+<text x="405.0" y="269" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">committed</text>
+<polyline points="300,390 720,390" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="720,390 712,386 712,394" fill="#285ac8"/>
+<text x="510.0" y="373" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">publish terminal · best effort</text>
+<polyline points="720,438 300,438" fill="none" stroke="#285ac8" stroke-width="2" stroke-dasharray="6 5"/>
+<polygon points="300,438 308,434 308,442" fill="#285ac8"/>
+<text x="510.0" y="421" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">attempt returned</text>
+<polyline points="300,492 930,492" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="930,492 922,488 922,496" fill="#285ac8"/>
+<text x="615.0" y="475" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">after_close(Summary) · once</text>
+<polyline points="300,324 344,324 344,352 300,352" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="300,352 308,348 308,356" fill="#285ac8"/>
+<text x="385" y="339" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">close</text>
+<text x="24" y="555" text-anchor="start" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="16" fill="#4c637b">commit 失败：保留 pending/open，不发终态、不通知。</text>
+</svg>

@@ -1,52 +1,50 @@
-# Architecture and extension boundaries
+# 架构与扩展
 
-```text
-host task -> EventCodec -> StreamRuntime -> bound LivePublisher -> live readers
-                              |
-                              +-> ArchiveStore -> snapshot + terminal + result
-                              |
-                              +-> frozen after_close summary (after closure)
+[English](architecture.en.md) · [文档导航](README.md)
+
+![三个端口与宿主边界](diagrams/architecture.png)
+
+| 端口 | 负责 | 不负责 |
+| --- | --- | --- |
+| `EventCodec` | 构造业务/终态事件；按 LIVE、ARCHIVE 编码 | I/O、修改已接受的事件 |
+| `LivePublisher` | 已绑定 execution 的实时发布；可返回带回执的新事件 | 改变业务内容、决定结果事务 |
+| `ArchiveStore` | `checkpoint`、活动更新、原子 `commit` | 权限、任务调度与自动重投递 |
+
+`StreamRuntime` 只协调缓冲、串行调用、降级与关闭顺序。宿主提供 execution 身份和 fencing，决定真实事务边界、结果结构与快照表示。
+核心无 Redis key/TTL/read 假设；`after_close` 是一次 frozen Summary 通知，不参与事务。
+
+## 完成顺序
+
+![先提交结果再关闭、尝试发送终态，最后通知](diagrams/completion.png)
+
+| 情况 | 结果 |
+| --- | --- |
+| `commit` 成功 | 尾部、终态、结果已同事务提交，然后关闭并尝试实时终态与通知 |
+| `commit` 抛错 | 异常传播，保留 pending/open，不发终态、不通知 |
+| 提交后的终态发布/通知失败 | 隔离普通异常，不能撤销已提交结果 |
+
+`send` 先构造并验证事件，再发布、编码归档并缓冲。回执后的归档编码仍可能失败，因此编码应确定、无 I/O；事件及嵌套数据接受后不得修改。
+checkpoint 成功才清 pending；只降级配置的基础设施错误，fencing/实现错误直接传播。完整性只向 COMPLETE → DEGRADED → TRUNCATED 变化。
+
+<details><summary>GitHub 可编辑时序</summary>
+
+```mermaid
+sequenceDiagram
+    participant H as Host
+    participant R as Runtime
+    participant S as ArchiveStore
+    participant L as LivePublisher
+    H->>R: finish(status, completion)
+    R->>S: commit(tail, terminal, completion)
+    S-->>R: committed
+    R->>R: close
+    R->>L: publish(terminal)
+    L-->>R: attempted
+    R->>H: after_close(Summary)
 ```
 
-`ui_stream.runtime` and `ui_stream.types` use only the standard library. Core modules
-do not import the default JSON/Pydantic or Redis profile. SQLite is a Demo adapter,
-not a core mechanism. The host owns execution identity, concurrency between processes,
-access checks, task lifecycle, result storage, and transaction/fencing decisions.
+</details>
 
-## Implement three ports
-
-- `EventCodec[E]`: create business/terminal values and deterministically encode each
-  for LIVE or ARCHIVE. No I/O or mutation. Your event need not inherit the default
-  Pydantic Event and your terminal vocabulary need not be SUCCESS/FAILED.
-- `LivePublisher[E]`: bound to an execution by the host; `publish(event) -> E` may
-  return a new event with a transport receipt. It must preserve business content.
-- `ArchiveStore[E]`: checkpoint, touch_activity, and commit. Runtime supplies tuple
-  batches. Checkpoint updates the snapshot with fencing; commit atomically persists
-  remaining tail, terminal and opaque completion, returning only after real commit.
-
-Use [the counter](../src/ui_stream/example.py) for dataclass events, text frames and
-an in-memory latest-value snapshot. Use [SQLite storage](../src/ui_stream/demo/storage.py)
-for durable latest-value snapshots and transaction/fencing examples. Neither consumer
-subclasses or patches Runtime. A production host should use its own storage adapter.
-
-## Order and error handling
-
-`send`: build/validate -> LIVE encoding/capacity -> live publish attempt -> ARCHIVE
-encoding/capacity -> pending buffer -> optional checkpoint. A codec error can occur
-after live publication if a receipt cannot be archived; callers must account for that.
-Events and nested data must not be mutated after acceptance.
-
-`finish`: construct/validate terminal -> encode both targets -> host atomic commit ->
-clear pending and close -> best-effort terminal publish -> optional summary callback.
-Commit failure leaves the Runtime open. Terminal publishing and callback failures after
-successful commit cannot roll back the host result. Normal send infrastructure errors
-are degraded only when configured; programming and fencing errors propagate.
-
-`finish_retry` checkpoints and closes without terminal or final result; it is a host
-retry boundary, not an automatic task runner. Activity touching is send-driven, not a
-background heartbeat. Summary callbacks cannot participate in the transaction.
-
-Default `codec`, `redis`, `reader`, `sse`, and JSON prefix helpers in `archive` form a
-specific optional profile. `reader` is Redis-only; replacing the channel does not
-magically supply a generic reader. Applications decide snapshot representation and
-reader recovery. The Runtime makes no Redis key/TTL/read assumptions.
+Counter 使用 dataclass、文本帧和内存最新值；SQLite Demo 使用自己的事件与事务存储。两者只装配公开端口。
+默认 JSON/Pydantic、Redis、Redis-only reader/SSE 和 JSON 前缀裁剪是可选 profile，并非任意通道的通用 reader。
+详见 [API](api.md) 与 [types.py](../src/ui_stream/types.py)。

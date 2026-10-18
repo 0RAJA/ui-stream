@@ -25,11 +25,11 @@ from unittest.mock import patch
 from ui_stream import Integrity, StreamRuntime, StreamPolicy
 from ui_stream.exceptions import ArchiveUnavailable, StaleExecution
 from ui_stream.types import Binding
-from ui_stream.demo.app import DemoService, make_server
-from ui_stream.demo.channel import MemoryChannel
-from ui_stream.demo.constants import JobStatus, Scenario
-from ui_stream.demo.events import DemoCodec, DemoEvent
-from ui_stream.demo.storage import DatabaseInUse, SQLiteArchiveStore, SQLiteRepository
+from demos.sqlite.app import DemoService, make_server
+from demos.sqlite.channel import MemoryChannel
+from demos.sqlite.constants import JobStatus, Scenario
+from demos.sqlite.events import DemoCodec, DemoEvent
+from demos.sqlite.storage import DatabaseInUse, SQLiteArchiveStore, SQLiteRepository
 
 faulthandler.dump_traceback_later(10, exit=True)
 
@@ -82,7 +82,13 @@ def post(url, payload):
 class StandaloneDemoTest(unittest.TestCase):
     def run_demo(self, source):
         root = os.environ.get("UI_STREAM_TEST_PATH", str(Path(__file__).resolve().parents[1] / "src"))
-        script = "import sys; sys.path.insert(0, " + repr(root) + ")\n" + BOOTSTRAP + textwrap.dedent(source)
+        script = (
+            "import sys; sys.path[:0] = "
+            + repr([root, str(Path(__file__).resolve().parents[1])])
+            + "\n"
+            + BOOTSTRAP
+            + textwrap.dedent(source)
+        )
         result = subprocess.run([sys.executable, "-I", "-S", "-c", script], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -434,7 +440,7 @@ class StandaloneDemoTest(unittest.TestCase):
     def test_busy_host_does_not_create_queued_jobs_and_existing_token_still_works(self):
         self.run_demo(
             r"""
-            from ui_stream.demo.service import DemoBusy
+            from demos.sqlite.service import DemoBusy
             with tempfile.TemporaryDirectory() as folder:
                 service=DemoService(Path(folder)/"demo.sqlite3",interval=0.2)
                 try:
@@ -465,7 +471,7 @@ class StandaloneDemoTest(unittest.TestCase):
                     # Keep the real SQLite lock/error path; only shorten its wait in this test.
                     kwargs["timeout"]=0.01
                     return original_connect(*args, **kwargs)
-                with patch("ui_stream.demo.storage.sqlite3.connect", side_effect=short_timeout):
+                with patch("demos.sqlite.storage.sqlite3.connect", side_effect=short_timeout):
                     _,job=post(url,{"request_token":str(uuid4()),"scenario":"normal"})
                     lock=original_connect(service.repository.path,isolation_level=None)
                     lock.execute("BEGIN IMMEDIATE")

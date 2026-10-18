@@ -14,9 +14,9 @@ from socketserver import TCPServer
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
-from ui_stream.demo.constants import MAX_REQUEST_BYTES, EventKind, JobStatus, Scenario
-from ui_stream.demo.events import json_bytes, sse_frame
-from ui_stream.demo.service import DemoBusy, DemoService
+from demos.sqlite.constants import MAX_REQUEST_BYTES, EventKind, JobStatus, Scenario
+from demos.sqlite.events import json_bytes, sse_frame
+from demos.sqlite.service import DemoBusy, DemoService
 
 ASSETS = {
     "/": ("index.html", "text/html"),
@@ -97,7 +97,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         if parsed.path in ASSETS:
             name, content_type = ASSETS[parsed.path]
-            self._response(200, files("ui_stream.demo").joinpath("static", name).read_bytes(), content_type)
+            self._response(200, files("demos.sqlite").joinpath("static", name).read_bytes(), content_type)
             return
         match = JOB_ROUTE.fullmatch(parsed.path)
         if not match:

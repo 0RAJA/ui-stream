@@ -1,27 +1,16 @@
-# Security policy
+# 安全说明
 
-## Reporting a vulnerability
+[English](SECURITY.en.md) · [文档导航](docs/README.md)
 
-Use [GitHub private vulnerability reporting](https://github.com/0RAJA/ui-stream/security/advisories/new)
-to contact the maintainer, [raja (@0RAJA)](https://github.com/0RAJA). Do not post exploit
-details, credentials, personal data or private logs in public issues. Include affected
-versions, impact and a minimal synthetic reproduction. This volunteer project makes
-no response-time SLA; no private email address is published.
+优先使用 [GitHub 私密漏洞报告](https://github.com/0RAJA/ui-stream/security/advisories/new)。入口不可用时可联系维护者 `raja <rajawwang@foxmail.com>`。
+报告应包含版本、影响及最小合成复现；不要将漏洞利用细节、凭据、个人信息或私有日志发到公开 issue。
+这是志愿维护项目，不承诺响应 SLA。只支持最新 alpha，不承诺旧 alpha 的安全回补。
 
-Only the latest alpha release is supported. There is no promise of security backports
-to earlier alpha versions. Report against the latest available release or main commit
-and identify the exact version in your private report.
+| 边界 | 需要注意 |
+| --- | --- |
+| 宿主 | 权限、跨进程 fencing、真实原子事务、重试/重启与保留策略 |
+| Runtime | 只在进程内串行；接受后的事件/嵌套值不能修改，降级异常配置应尽量窄 |
+| Demo | 仅 loopback、合成数据、无认证；专用 SQLite，重启会中断而非续跑任务 |
+| 发布检查 | 规则扫描与白名单不能证明不存在所有秘密、PII 或未标识的敏感含义 |
 
-## Trust boundaries
-
-The host enforces authentication, authorization, execution fencing, atomic commit,
-retries, restarts and retention. Runtime locking is process-local. Do not mutate
-accepted events or nested values. Configure recoverable exceptions narrowly.
-
-The Demo binds localhost, uses synthetic data and has no authentication. Do not expose
-it through a public proxy or use it as a production task API. Use a dedicated Demo
-database; startup interrupts unfinished jobs without resuming their computation.
-
-Release checks scan allowlisted files and actual archives. Pattern scanning cannot
-prove the absence of every credential, personal datum or undisclosed business meaning.
-No dependency source, private account data or credentials are bundled.
+不提供公网 Demo 服务；不在仓库、包或 Actions secret 中复制账户凭据。

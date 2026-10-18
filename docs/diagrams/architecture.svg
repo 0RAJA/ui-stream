@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" role="img" aria-labelledby="title desc">
+<title id="title">三个端口，持久结果由宿主提交</title><desc id="desc">Host calls Runtime; codec builds events; live publishes best effort; archive commits snapshots and results; UI reads both paths.</desc>
+<rect width="1040" height="560" fill="#eef3f8"/>
+<text x="24" y="30" text-anchor="start" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="24" fill="#18324f">三个端口，持久结果由宿主提交</text>
+<text x="24" y="63" text-anchor="start" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="17" fill="#4c637b">核心只协调；三个端口由宿主实现。</text>
+<rect x="24" y="234" width="160" height="88" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="104.0" y="265.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">Host / 任务</text>
+<text x="104.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">send · finish</text>
+<rect x="244" y="220" width="200" height="116" rx="10" fill="white" stroke="#285ac8" stroke-width="1.5"/>
+<text x="344.0" y="265.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#285ac8">StreamRuntime</text>
+<text x="344.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">有界缓冲与完成顺序</text>
+<rect x="504" y="98" width="216" height="88" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="612.0" y="129.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">EventCodec</text>
+<text x="612.0" y="161.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">事件构造与编码</text>
+<rect x="504" y="234" width="216" height="88" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="612.0" y="265.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">LivePublisher</text>
+<text x="612.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">尽力实时尾流</text>
+<rect x="504" y="406" width="216" height="88" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="612.0" y="437.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">ArchiveStore</text>
+<text x="612.0" y="469.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">持久快照与结果</text>
+<rect x="840" y="234" width="176" height="88" rx="10" fill="white" stroke="#4c637b" stroke-width="1.5"/>
+<text x="928.0" y="265.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="20" fill="#18324f">UI</text>
+<text x="928.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">观察与恢复</text>
+<polyline points="184,278 244,278" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="244,278 236,274 236,282" fill="#285ac8"/>
+<polyline points="444,238 472,238 472,142 504,142" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="504,142 496,138 496,146" fill="#285ac8"/>
+<polyline points="444,278 504,278" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="504,278 496,274 496,282" fill="#285ac8"/>
+<polyline points="444,316 472,316 472,450 504,450" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="504,450 496,446 496,454" fill="#285ac8"/>
+<polyline points="720,278 840,278" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="840,278 832,274 832,282" fill="#285ac8"/>
+<text x="780" y="259" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="14" fill="#4c637b">SSE / live</text>
+<polyline points="720,450 928,450 928,322" fill="none" stroke="#285ac8" stroke-width="2"/>
+<polygon points="928,322 924,330 932,330" fill="#285ac8"/>
+<text x="825" y="475" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="15" fill="#4c637b">最新快照</text>
+<text x="24" y="530" text-anchor="start" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="16" fill="#4c637b">不保证完整历史重放或断线无损恢复。</text>
+</svg>

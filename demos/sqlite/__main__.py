@@ -4,8 +4,8 @@ import argparse
 import logging
 from pathlib import Path
 
-from ui_stream.demo.app import DemoService, make_server
-from ui_stream.demo.storage import DatabaseInUse
+from demos.sqlite.app import DemoService, make_server
+from demos.sqlite.storage import DatabaseInUse
 
 
 def main():

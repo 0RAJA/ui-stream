@@ -1,4 +1,4 @@
-"""Verify built distributions and isolated consumers without uploading or installing."""
+"""Verify minimal artifacts with repository-owned tests and isolated consumers."""
 
 import argparse
 import json
@@ -24,13 +24,26 @@ def run(command, *, cwd, env):
     subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
+def consumer_tests(project, package, temporary, env):
+    env = dict(env, UI_STREAM_TEST_PATH=str(package), PYTHONPATH="")
+    script = (
+        "import sys; sys.path[:0]=" + repr([str(package), str(project)]) + "; "
+        "import ui_stream; "
+        "assert ui_stream.__file__.startswith(" + repr(str(package)) + "), ui_stream.__file__; "
+        "import unittest; unittest.main(module=None, argv="
+        + repr(["consumer", "tests.test_contract", "tests.test_demo", "tests.test_demo_client", "-v"])
+        + ")"
+    )
+    run([sys.executable, "-I", "-c", script], cwd=temporary, env=env)
+
+
 def verify(project, dist):
     report = check_project(project, dist)
     if report["findings"]:
         raise ValueError(json.dumps(report["findings"]))
     metadata = tomllib.loads((project / "pyproject.toml").read_text())["project"]
-    wheel = next(dist.glob("*.whl"))
-    sdist = next(dist.glob("*.tar.gz"))
+    (wheel,) = dist.glob("*.whl")
+    (sdist,) = dist.glob("*.tar.gz")
     stem = metadata["name"].replace("-", "_") + "-" + metadata["version"] + ".dist-info/"
     with ZipFile(wheel) as archive:
         headers = BytesParser().parsebytes(archive.read(stem + "METADATA"))
@@ -38,6 +51,7 @@ def verify(project, dist):
         assert headers["Version"] == metadata["version"]
         assert headers["Requires-Python"] == metadata["requires-python"]
         assert headers["License-Expression"] == "MIT"
+        assert headers["Author-email"] == headers["Maintainer-email"] == "raja <rajawwang@foxmail.com>"
         assert set(headers.get_all("License-File")) == {"LICENSE", "LICENSE.upstream", "NOTICE"}
         assert all("extra ==" in dependency for dependency in headers.get_all("Requires-Dist", []))
         for name in ("LICENSE", "LICENSE.upstream", "NOTICE"):
@@ -45,41 +59,55 @@ def verify(project, dist):
         for name in (project / "release-allowlist.txt").read_text().splitlines():
             if name.startswith("src/"):
                 assert archive.read(name.removeprefix("src/")) == (project / name).read_bytes(), name
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", UI_STREAM_TEST_PATH=str(wheel))
-    tests = ["-m", "unittest", "tests.test_contract", "tests.test_demo", "tests.test_demo_client", "-v"]
-    run([sys.executable, *tests], cwd=project, env=env)
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH="")
     with tempfile.TemporaryDirectory(prefix="ui-stream-verify-") as folder:
         temporary = Path(folder)
+        consumer_tests(project, wheel, temporary, env)
         installed = temporary / "installed"
-        with ZipFile(wheel) as archive:
-            archive.extractall(installed)
-        env["UI_STREAM_TEST_PATH"] = str(installed)
-        run([sys.executable, *tests], cwd=project, env=env)
+        run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "--isolated",
+                "install",
+                "--no-index",
+                "--no-deps",
+                "--no-compile",
+                "--target",
+                str(installed),
+                str(wheel),
+            ],
+            cwd=temporary,
+            env=env,
+        )
+        consumer_tests(project, installed, temporary, env)
+        # -S hides all third-party site packages: this proves the core plus repository
+        # host example works without the optional JSON/Redis profiles.
+        script = (
+            "import sys; sys.path[:0]=" + repr([str(installed), str(project)]) + "; "
+            "import importlib.metadata, runpy, ui_stream; "
+            "assert importlib.metadata.version('ui-stream')==" + repr(metadata["version"]) + "; "
+            "assert ui_stream.__file__.startswith(" + repr(str(installed)) + "); "
+            "runpy.run_module('examples.counter',run_name='__main__')"
+        )
+        run([sys.executable, "-I", "-S", "-c", script], cwd=temporary, env=env)
         source = temporary / "source"
         with tarfile.open(sdist) as archive:
             archive.extractall(source, filter="data")
-        extracted = next(source.iterdir())
+        (extracted,) = source.iterdir()
         for name in (project / "release-allowlist.txt").read_text().splitlines():
             assert (extracted / name).read_bytes() == (project / name).read_bytes(), name
         rebuilt = temporary / "rebuilt"
         rebuilt.mkdir()
         script = "from setuptools.build_meta import build_wheel; build_wheel(" + repr(str(rebuilt)) + ")"
         run([sys.executable, "-c", script], cwd=extracted, env=env)
-        rebuilt_wheel = next(rebuilt.glob("*.whl"))
+        (rebuilt_wheel,) = rebuilt.glob("*.whl")
         with ZipFile(wheel) as first, ZipFile(rebuilt_wheel) as second:
             assert set(first.namelist()) == set(second.namelist())
             assert all(first.read(name) == second.read(name) for name in first.namelist())
-        env["UI_STREAM_TEST_PATH"] = str(rebuilt_wheel)
-        env["PYTHONPATH"] = str(extracted / "src")
-        run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=extracted, env=env)
-        script = (
-            "import sys; sys.path.insert(0," + repr(str(rebuilt_wheel)) + "); "
-            "import importlib.metadata, runpy, ui_stream; "
-            "assert importlib.metadata.version('ui-stream')==" + repr(metadata["version"]) + "; "
-            "assert '.whl/' in ui_stream.__file__; "
-            "runpy.run_module('ui_stream.example',run_name='__main__')"
-        )
-        run([sys.executable, "-I", "-S", "-c", script], cwd=temporary, env=env)
+        # Tests and hosts deliberately stay outside the extracted minimal sdist.
+        consumer_tests(project, rebuilt_wheel, temporary, env)
     print(json.dumps({"verified": metadata["version"], "artifacts": report["artifacts"]}, indent=2))
 
 

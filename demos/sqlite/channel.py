@@ -8,8 +8,8 @@ import threading
 from collections import deque
 from dataclasses import dataclass, replace
 
-from ui_stream.demo.constants import CHANNEL_CAPACITY, EventKind, Scenario
-from ui_stream.demo.events import DemoEvent
+from demos.sqlite.constants import CHANNEL_CAPACITY, EventKind, Scenario
+from demos.sqlite.events import DemoEvent
 from ui_stream.exceptions import LiveUnavailable
 
 

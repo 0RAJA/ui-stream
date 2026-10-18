@@ -10,11 +10,11 @@ import threading
 from pathlib import Path
 from uuid import UUID
 
+from demos.sqlite.channel import DemoPublisher, MemoryChannel
+from demos.sqlite.constants import MAX_ACTIVE_JOBS, MAX_CHANNELS, TOTAL_STEPS, EventKind, JobStatus, Scenario
+from demos.sqlite.events import DemoCodec, DemoEvent
+from demos.sqlite.storage import DatabaseLease, SQLiteArchiveStore, SQLiteRepository
 from ui_stream import StreamPolicy, StreamRuntime
-from ui_stream.demo.channel import DemoPublisher, MemoryChannel
-from ui_stream.demo.constants import MAX_ACTIVE_JOBS, MAX_CHANNELS, TOTAL_STEPS, EventKind, JobStatus, Scenario
-from ui_stream.demo.events import DemoCodec, DemoEvent
-from ui_stream.demo.storage import DatabaseLease, SQLiteArchiveStore, SQLiteRepository
 from ui_stream.exceptions import ArchiveUnavailable, StaleExecution
 from ui_stream.types import Binding
 

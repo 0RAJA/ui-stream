@@ -62,7 +62,13 @@ runtime = StreamRuntime(binding=binding, publisher=live, codec=JsonEventCodec(),
 class StandaloneStreamContractTest(unittest.TestCase):
     def run_contract(self, source, *, bootstrap=BOOTSTRAP):
         root = os.environ.get("UI_STREAM_TEST_PATH", str(Path(__file__).resolve().parents[1] / "src"))
-        script = "import sys; sys.path.insert(0, " + repr(root) + ")\n" + bootstrap + textwrap.dedent(source)
+        script = (
+            "import sys; sys.path[:0] = "
+            + repr([root, str(Path(__file__).resolve().parents[1])])
+            + "\n"
+            + bootstrap
+            + textwrap.dedent(source)
+        )
         result = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -253,7 +259,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
         self.run_contract(
             """
             import sys
-            from ui_stream.example import make_counter
+            from examples.counter import make_counter
             from ui_stream import StreamPolicy
             for threshold in (1, 20):
                 runtime, live, store = make_counter(policy=StreamPolicy(checkpoint_event_count=threshold))
@@ -276,7 +282,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
     def test_custom_live_failure_preserves_domain_snapshot_and_result(self):
         self.run_contract(
             """
-            from ui_stream.example import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
+            from examples.counter import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
             from ui_stream import StreamRuntime, Integrity
             from ui_stream.exceptions import LiveUnavailable
             class OfflinePublisher(MemoryPublisher):
@@ -298,7 +304,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
     def test_custom_snapshot_failure_recovers_and_commit_failure_keeps_open(self):
         self.run_contract(
             """
-            from ui_stream.example import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
+            from examples.counter import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
             from ui_stream import StreamRuntime, StreamPolicy, Integrity
             from ui_stream.exceptions import ArchiveUnavailable
             class UnavailableStore(MemorySnapshotStore):
@@ -346,7 +352,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
         self.run_contract(
             """
             from dataclasses import FrozenInstanceError
-            from ui_stream.example import make_counter
+            from examples.counter import make_counter
             summaries = []
             def observer(summary):
                 summaries.append(summary)
@@ -372,7 +378,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
     def test_custom_checkpoint_recovers_all_pending_values_without_closing(self):
         self.run_contract(
             """
-            from ui_stream.example import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
+            from examples.counter import CounterCodec, MemoryPublisher, MemorySnapshotStore, counter_binding
             from ui_stream import StreamRuntime, StreamPolicy, Integrity
             from ui_stream.exceptions import ArchiveUnavailable
             class RecoveringStore(MemorySnapshotStore):

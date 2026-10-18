@@ -1,6 +1,6 @@
 """A counter consumer using domain dataclasses, text frames and a latest-value snapshot.
 
-Run ``python -m ui_stream.example`` without Django, Redis or Pydantic. This
+Run ``python -m examples.counter`` without Django, Redis or Pydantic. This
 in-process demonstration has no restart durability; a real host supplies its
 own transaction and execution ownership.
 """

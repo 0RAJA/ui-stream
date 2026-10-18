@@ -11,9 +11,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
+from demos.sqlite.constants import RECOVERABLE_SQLITE_ERRORS, JobStatus, Scenario
+from demos.sqlite.events import DemoCodec, DemoEvent, json_bytes
 from ui_stream.archive import merge_archive_status
-from ui_stream.demo.constants import RECOVERABLE_SQLITE_ERRORS, JobStatus, Scenario
-from ui_stream.demo.events import DemoCodec, DemoEvent, json_bytes
 from ui_stream.exceptions import ArchiveUnavailable, StaleExecution
 from ui_stream.types import Checkpoint, ExecutionBinding, Integrity
 

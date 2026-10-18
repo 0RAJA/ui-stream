@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ui-stream"
 version = "0.1.0a1"
 description = "Bounded UI event streaming with host-owned durable results"
-readme = "README.md"
+readme = {file = "README.pypi.md", content-type = "text/markdown"}
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "LICENSE.upstream", "NOTICE"]
@@ -36,11 +36,11 @@ redis = ["pydantic>=2.10,<3", "redis>=3.5.3"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["ui_stream", "ui_stream.demo"]
+packages = ["ui_stream"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-"ui_stream.demo" = ["README.md", "static/index.html", "static/demo.css", "static/demo.js"]
+ui_stream = ["py.typed"]
 
 [tool.black]
 line-length = 120

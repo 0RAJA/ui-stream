@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.check_release import check_project, scan_text
+from tools.check_release import check_project, expected_members, scan_text
 
 try:
     from tools.verify_distribution import validate_release_tag
@@ -45,3 +45,29 @@ class PublishingTest(unittest.TestCase):
         self.assertEqual(scan_text("pyproject.toml", approved), [])
         unapproved = ("someone" + "@" + "example.org").encode()
         self.assertIn("email_address", {item["category"] for item in scan_text("fixture", unapproved)})
+
+
+class DistributionBoundaryTest(unittest.TestCase):
+    def test_default_wheel_contains_only_runtime_and_type_marker(self):
+        root = Path(__file__).resolve().parents[1]
+        _, wheel, sdist = expected_members(root)
+        payload = {name for name in wheel if ".dist-info/" not in name}
+        expected = {
+            "ui_stream/" + name
+            for name in (
+                "__init__.py",
+                "archive.py",
+                "codec.py",
+                "exceptions.py",
+                "reader.py",
+                "redis.py",
+                "runtime.py",
+                "sse.py",
+                "types.py",
+                "py.typed",
+            )
+        }
+        self.assertEqual(payload, expected)
+        forbidden = ("demos/", "examples/", "tests/", "benchmarks/", "tools/", ".github/", "docs/")
+        self.assertFalse(any(name.startswith(forbidden) for name in sdist))
+        self.assertIn("README.pypi.md", sdist)

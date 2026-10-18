@@ -1,94 +1,60 @@
 # ui-stream
 
-A synchronous coordinator for bounded UI events, latest-state snapshots, and
-host-owned durable results. Distribution name: `ui-stream`; import: `ui_stream`.
-An alpha library maintained by [raja (@0RAJA)](https://github.com/0RAJA).
-[CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml) validates source,
-wheel and source distributions on Linux/macOS before release artifacts are published.
+[English](README.en.md) · [文档](docs/README.md) · [CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml)
 
-## Quick start
+**把后台任务的进度发给 UI，定期保存快照，让最终结果由业务自己的事务提交。**
+核心同步、无第三方依赖；通过三个端口接入业务事件、实时通道和持久存储。
 
-From a built wheel (the first PyPI release is being prepared):
+## 快速上手
+
+Python ≥3.11，在虚拟环境中从源码运行：
 
 ```sh
-python -m pip install --no-deps ./dist/ui_stream-0.1.0a1-py3-none-any.whl
-python -m ui_stream.example
-python -m ui_stream.demo --database ./demo.sqlite3 --port 8765
+python -m pip install --no-deps .
+python -m examples.counter
+python -m demos.sqlite --database ./demo.sqlite3 --port 8765
 ```
 
-Open `http://127.0.0.1:8765`. The Demo uses only Python's standard library and
-synthetic data. It binds to localhost and keeps the latest snapshot in a dedicated
-SQLite file. See [Demo instructions](https://github.com/0RAJA/ui-stream/blob/main/src/ui_stream/demo/README.md).
-The base package has no third-party runtime dependencies. Optional profiles are
-installed with `ui-stream[json]` or `ui-stream[redis]` after publication.
+打开 `http://127.0.0.1:8765`。Demo 仅用标准库 HTTP/SQLite 和合成数据；macOS/Linux 可运行。
+Counter 和 Demo 位于仓库的 `examples/`、`demos/`，需在仓库根目录运行；默认 wheel 只含核心。
+发布到 PyPI 后可安装 `ui-stream==0.1.0a1`；import 名为 `ui_stream`。
+
+## 适用边界
+
+| 适合 | 由宿主负责 / 不保证 |
+| --- | --- |
+| 任务进度、最新快照、尽力实时尾流 | 权限、跨进程 fencing、任务重试与业务结果事务 |
+| 有界缓冲、checkpoint、提交后再发终态 | 完整历史重放、断线无损、exactly-once |
+| 同步 Python 宿主，自定义事件与存储 | 自动续跑、读者断开即取消、生产级 Demo 服务 |
+
+## 扩展入口
+
+实现 `EventCodec`、`LivePublisher`、`ArchiveStore` 即可接入，无须继承或修改 `StreamRuntime`。
+内存 Counter 展示自定义事件与结果；SQLite Demo 展示持久快照、SSE 与故障恢复。
 
 ```python
 from ui_stream import StreamPolicy
-from ui_stream.example import make_counter
+from examples.counter import make_counter
 
 runtime, channel, store = make_counter(policy=StreamPolicy(checkpoint_event_count=1))
 runtime.send(4)
 runtime.send(9)
 runtime.finish(status="DONE", completion=13)
-assert channel.frames == [b"tick:4", b"tick:9", b"done:DONE"]
 assert store.snapshot.latest == 9 and store.snapshot.result == 13
 ```
 
-## Guarantees and host responsibilities
-
-- A Runtime belongs to one execution and serializes calls within the process.
-- Pending events have explicit byte/count bounds. Successful checkpoints clear pending;
-  known infrastructure failures degrade integrity and preserve bounded pending state.
-- `finish` asks the host store to atomically commit tail, terminal event and result
-  before closing and attempting live terminal publication.
-- A failed commit propagates, leaves the Runtime open, and emits no terminal notification.
-- An optional frozen summary callback runs once after closure, outside the Runtime lock.
-- The host provides real commit boundaries, execution fencing, authentication,
-  authorization, task retries/restarts, cancellation, retention and final business results.
-
-This is a snapshot plus best-effort live-tail component. It does not promise complete
-history replay, lossless reconnects, exactly-once delivery, cross-process synchronization,
-async execution, crash recovery of computation, or task cancellation on reader disconnect.
-The Demo is a local learning tool, without authentication or multi-tenant isolation.
-
-## Dependencies and support
-
-| Profile | Dependencies |
+| 安装范围 | 依赖 |
 | --- | --- |
-| Core, counter, SQLite Demo | Standard library only |
-| `ui-stream[json]` | Pydantic >=2.10,<3 |
-| `ui-stream[redis]` | Pydantic >=2.10,<3 and redis-py >=3.5.3 |
-| Build | setuptools >=77.0.3 |
-| Optional browser-client unit tests | Existing Node, no npm packages |
+| 核心 wheel | 标准库 |
+| 仓库 Counter / SQLite Demo | 标准库 + 已安装核心 |
+| `[json]` | Pydantic ≥2.10,<3 |
+| `[redis]` | Pydantic ≥2.10,<3，redis-py ≥3.5.3 |
 
-Python >=3.11 is required. CI targets CPython 3.11–3.14 on Linux and macOS;
-check the linked CI run for the actual tested commit and successful combinations. The Demo requires
-macOS/Linux `fcntl`; Windows Demo support is not provided. Redis integration tests use
-fixtures, not a complete server/version compatibility matrix. Redis versions beyond
-the locally exercised dependency versions require downstream compatibility checks.
+![组件边界：任务调用 Runtime，宿主实现三个端口，UI读取实时尾流和快照](docs/diagrams/architecture.png)
 
-## Development and documentation
+[架构与完成顺序](docs/architecture.md) · [API 契约](docs/api.md) · [Demo](demos/sqlite/README.md) ·
+[性能与比较](docs/performance.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [发布](docs/releasing.md)
 
-```sh
-PYTHONPATH=src python -m unittest discover -s tests -v
-python tools/build_local.py --output ./dist
-python tools/check_release.py --project . --dist ./dist
-```
-
-The full suite needs the declared optional JSON/Redis dependencies already present.
-The standard-library Demo suite can run alone:
-`PYTHONPATH=src python -m unittest tests.test_demo`.
-Use a virtual environment. The local helper calls an existing backend without fetching
-dependencies; CI installs declared test/build dependencies in its ephemeral runner. [Contributing](https://github.com/0RAJA/ui-stream/blob/main/CONTRIBUTING.md) explains source and wheel testing.
-
-- [Architecture and extension ports](https://github.com/0RAJA/ui-stream/blob/main/docs/architecture.md)
-- [API contract and compatibility](https://github.com/0RAJA/ui-stream/blob/main/docs/api.md)
-- [Demo](https://github.com/0RAJA/ui-stream/blob/main/src/ui_stream/demo/README.md)
-- [Security and vulnerability reporting](https://github.com/0RAJA/ui-stream/blob/main/SECURITY.md)
-- [Release checklist](https://github.com/0RAJA/ui-stream/blob/main/docs/releasing.md)
-- [Changelog](https://github.com/0RAJA/ui-stream/blob/main/CHANGELOG.md)
-- [Provenance](https://github.com/0RAJA/ui-stream/blob/main/PROVENANCE.md), [MIT license](https://github.com/0RAJA/ui-stream/blob/main/LICENSE), [upstream declaration](https://github.com/0RAJA/ui-stream/blob/main/LICENSE.upstream)
-
-The public repository is [0RAJA/ui-stream](https://github.com/0RAJA/ui-stream).
-Use [private vulnerability reporting](https://github.com/0RAJA/ui-stream/security/advisories/new)
-for sensitive reports; see SECURITY.md. No private email or publication token is bundled.
+CI 的源码矩阵覆盖 Python 3.11–3.14 / Linux、macOS；wheel、sdist 与 README 验证在 Linux 执行。
+维护者：`raja <rajawwang@foxmail.com>`（GitHub [0RAJA](https://github.com/0RAJA)）。
+[MIT 及来源说明](docs/license.md)；原版权声明保持不变。
