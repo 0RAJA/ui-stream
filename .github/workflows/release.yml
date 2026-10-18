@@ -1,0 +1,15 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+# PyPI publishing is intentionally not enabled until the maintainer approves
+# the exact Trusted Publisher and environment configuration in docs/releasing.md.

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UI Stream 实验台</title>
+  <link rel="stylesheet" href="/demo.css">
+  <script src="/demo.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <p class="local">本机演示 · 合成数据</p>
+    <h1>UI Stream 实验台</h1>
+    <p>观察逐条输出、已保存快照与最终结果。刷新页面会恢复同一个任务。</p>
+  </header>
+  <form id="create-form" class="controls">
+    <label for="scenario">演示场景
+      <select id="scenario" name="scenario">
+        <option value="normal">正常完成</option>
+        <option value="business_error">业务异常：第 6 步失败</option>
+        <option value="live_failure">实时通道：第 4–7 步不可用</option>
+        <option value="checkpoint_failure">中间快照：首次写入失败</option>
+        <option value="commit_failure">最终提交：失败一次后重试</option>
+      </select>
+    </label>
+    <button id="create" type="submit">创建演示任务</button>
+    <button id="disconnect" class="secondary" type="button" disabled>断开实时</button>
+    <button id="reconnect" class="secondary" type="button" disabled>恢复连接</button>
+  </form>
+  <p id="scenario-description" class="hint">每半秒产生一条进度，每 3 条写入一次 SQLite，最终提交后结束。</p>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <section class="task" aria-label="当前任务">
+    <dl>
+      <div><dt>任务状态</dt><dd id="job-status">尚未创建</dd></div>
+      <div><dt>实时连接</dt><dd id="connection-status">未连接</dd></div>
+      <div><dt>快照完整性</dt><dd id="integrity">—</dd></div>
+    </dl>
+    <progress id="progress" max="12" value="0" aria-label="当前进度"></progress>
+    <p id="progress-label">0 / 12</p>
+    <details><summary>任务标识</summary><p id="job-id">创建后显示</p></details>
+  </section>
+  <div class="columns">
+    <section class="live" aria-labelledby="live-title">
+      <h2 id="live-title">实时输出</h2>
+      <p class="hint">当前连接收到的进度；恢复时先显示最新快照。</p>
+      <ol id="events" aria-live="polite"><li class="empty">选择场景并创建任务，观察事件逐条到达。</li></ol>
+    </section>
+    <section class="saved" aria-labelledby="snapshot-title">
+      <h2 id="snapshot-title">SQLite 快照</h2>
+      <p id="snapshot-label" class="hint">每秒读取一次，只保存最新进度。</p>
+      <pre id="snapshot">尚未保存进度</pre>
+      <h2>最终结果</h2>
+      <pre id="result">任务结束后显示已提交的结果。</pre>
+    </section>
+  </div>
+  <footer>
+    <p>快照恢复只恢复最新状态，不代表完整历史重放。断开页面不会取消任务。</p>
+    <p>服务重启后保留已保存快照，未完成任务标为中断，不自动续跑。</p>
+  </footer>
+</main>
+</body>
+</html>

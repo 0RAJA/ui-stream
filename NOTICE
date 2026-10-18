@@ -1,0 +1,15 @@
+ui-stream
+
+Portions are extracted from or derived from BlueKing - Audit Center (bk-audit).
+Copyright (C) 2023 THL A29 Limited, a Tencent company. All rights reserved.
+The original repository-level MIT declaration is preserved verbatim in LICENSE.upstream.
+LICENSE contains the full MIT permission and warranty terms with the original copyright.
+
+The code was refactored into a host-neutral runtime and optional adapters.
+A new counter example, SQLite/browser demonstration, independent tests, packaging,
+and documentation were prepared alongside the extraction. See PROVENANCE.md.
+No upstream endorsement or right to use upstream trademarks is claimed.
+
+The maintainer has authorized public distribution of this extraction and its
+new material under MIT. Existing upstream copyright remains unchanged; this
+notice does not assign a different owner to newly generated work.

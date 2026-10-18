@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ui-stream"
+version = "0.1.0a1"
+description = "Bounded UI event streaming with host-owned durable results"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE", "LICENSE.upstream", "NOTICE"]
+authors = [{name = "raja", email = "rajawwang@foxmail.com"}]
+maintainers = [{name = "raja", email = "rajawwang@foxmail.com"}]
+dependencies = []
+keywords = ["sse", "streaming", "snapshot", "ui"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/0RAJA/ui-stream"
+Repository = "https://github.com/0RAJA/ui-stream"
+Documentation = "https://github.com/0RAJA/ui-stream/tree/main/docs"
+Issues = "https://github.com/0RAJA/ui-stream/issues"
+Changelog = "https://github.com/0RAJA/ui-stream/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+json = ["pydantic>=2.10,<3"]
+redis = ["pydantic>=2.10,<3", "redis>=3.5.3"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["ui_stream", "ui_stream.demo"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+"ui_stream.demo" = ["README.md", "static/index.html", "static/demo.css", "static/demo.js"]
+
+[tool.black]
+line-length = 120
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+line_length = 120
