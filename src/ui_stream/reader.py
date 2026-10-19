@@ -1,8 +1,14 @@
 # Copyright (C) 2023 THL A29 Limited, a Tencent company. All rights reserved.
 # SPDX-License-Identifier: MIT
-"""Redis-only live iteration; authorization and initial state checks belong to the host."""
+"""Ordered Redis live iteration with optional host-owned state reconciliation.
+
+The host supplies authorization and execution-state checks without exposing its
+models to the reader. Durable terminal hints drain the current tail; reset or
+state-check errors stop queued delivery immediately.
+"""
 
 import logging
+import math
 import re
 import time
 
@@ -38,15 +44,52 @@ def iter_live(
     block_ms=15000,
     idle_timeout=300,
     clock=time.monotonic,
-    live_errors=(LiveUnavailable, OSError)
+    live_errors=(LiveUnavailable, OSError),
+    state_check=None,
+    state_poll_interval=15,
 ):
-    last_business_event_at = clock()
+    """Yield ordered live events and heartbeats, optionally reconciling host state.
+
+    ``state_check`` returns a closing event or None and may raise host-owned
+    exceptions. A durable end is held until the raw Redis tail is empty, while
+    any other state event closes immediately. Checks continue during draining.
+    """
+
+    if state_check is not None and state_poll_interval <= 0:
+        raise ValueError("state_poll_interval must be positive")
+    now = clock()
+    last_business_event_at = now
+    next_state_check = now + state_poll_interval if state_check is not None else None
+    terminal_event = None
+
+    def refresh_state(now):
+        nonlocal next_state_check, terminal_event
+        if now < next_state_check:
+            return None
+        state_event = state_check()
+        next_state_check = now + state_poll_interval
+        if state_event is not None and state_event.event == ControlEvent.STREAM_END:
+            terminal_event = state_event
+            return None
+        return state_event
+
     while True:
+        read_block_ms = block_ms
+        if state_check is not None:
+            now = clock()
+            state_event = refresh_state(now)
+            if state_event is not None:
+                yield state_event
+                return
+            # A socket read shares the next check's deadline, even on a busy stream.
+            read_block_ms = (
+                0 if terminal_event is not None else min(block_ms, max(1, math.ceil((next_state_check - now) * 1000)))
+            )
         try:
             read_result = redis_store.read(
                 redis_key=redis_key,
                 after_id=cursor,
-                block_ms=block_ms,
+                block_ms=read_block_ms,
             )
         except live_errors:
             # Redis 故障只终止本次 SSE；前端会重新读取详情和快照。
@@ -55,28 +98,41 @@ def iter_live(
                 extra={"redis_key": redis_key},
             )
             return
-        # 每轮只取一次时钟，避免测试及超时边界因分支额外调用而漂移。
-        now = clock()
+        if state_check is None:
+            # Preserve one clock read per batch for consumers without reconciliation.
+            now = clock()
 
-        # XREAD 可能只读到被丢弃的脏 entry；即使无有效事件也要
-        # 推进游标，否则下一轮会立即重读同一批数据。
+        # Dirty entries still advance the raw cursor, preventing repeated reads.
         if read_result.last_seen_stream_id:
             cursor = read_result.last_seen_stream_id
 
         has_business_event = False
-        for event in read_result.events:
+        for event in read_result.events or (None,):
+            if state_check is not None:
+                now = clock()
+                state_event = refresh_state(now)
+                if state_event is not None:
+                    yield state_event
+                    return
+            if event is None:
+                if terminal_event is not None:
+                    # A dirty-only batch has not exhausted the raw tail.
+                    if read_result.last_seen_stream_id:
+                        break
+                    yield terminal_event
+                    return
+                if now - last_business_event_at >= idle_timeout:
+                    return
+                yield None
+                continue
             yield event
             if event.event in CLOSING_EVENTS:
-                # 终止事件已下发，后续 entry 属于旧流残留，不再推送。
+                # Preserve the original closing event and its Redis cursor.
                 return
             if event.event is None:
-                # Event.event 为空表示默认 SSE message，即业务事件；
-                # heartbeat 是迭代器返回的 Python None，不会进入此分支。
                 has_business_event = True
                 last_business_event_at = now
 
-        # heartbeat、脏 entry 和平台事件都不刷新窗口；平台事件批次也必须超时。
-        if not has_business_event and now - last_business_event_at >= idle_timeout:
+        # Heartbeats and control/dirty batches never refresh business activity.
+        if terminal_event is None and not has_business_event and now - last_business_event_at >= idle_timeout:
             return
-        if not read_result.events:
-            yield None

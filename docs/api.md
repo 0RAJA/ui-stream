@@ -40,3 +40,9 @@ Store 自行限制持久快照容量；活动更新由 `send` 驱动，不是后
 
 `normalize_cursor` 接受 ASCII 的两段 uint64 Redis stream ID。reader 不负责授权、初始快照或重连补发。
 使用 `decode_responses=False` 可让适配器逐项跳过坏 payload 并推进真实 entry ID。正常的字符串响应也受支持；但 `decode_responses=True` 的客户端可能在返回任何 entry 前因坏 UTF-8 解析失败，此时归一为 `LiveUnavailable` 并结束本次 reader，由宿主重新读快照；不会猜测未知游标或承诺跳过该 entry。
+
+## Redis reader 的宿主状态与归档计量
+
+`iter_live(..., state_check=None, state_poll_interval=15)` 可接收无参宿主检查，返回控制事件或 `None`。同 execution 结束提示会先排空已发布尾流；原结束事件和游标优先透传，raw 空批才合成结束。reset 立即关闭，宿主权限异常向外传播；检查和异常处理不引入模型依赖。默认不启用检查。
+
+`encoded_archive_bytes(events, event_size=None)` 与 `fit_archive_events(..., event_size=None)` 共用单事件计量函数；默认计量 model_dump。内部字段被公开序列化排除时，宿主传入实际持久记录的字节计量。连续前缀裁剪算法仍只有一份。

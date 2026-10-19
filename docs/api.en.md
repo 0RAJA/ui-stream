@@ -40,3 +40,9 @@ For host adoption, pin the extra/version, remove embedded `ui_stream` to prevent
 
 `normalize_cursor` accepts two ASCII uint64 Redis stream-ID components. The reader does not provide authorization, initial snapshots, or replay on reconnect.
 With `decode_responses=False`, the adapter can skip dirty payloads individually and advance real entry IDs. Normal string responses are also supported. A `decode_responses=True` client can fail on invalid UTF-8 before returning any entry, however; this becomes `LiveUnavailable` and ends the current reader so the host can reload a snapshot. No unknown cursor is guessed, and skipping that entry is not promised.
+
+## Host state checks and archive sizing
+
+`iter_live(..., state_check=None, state_poll_interval=15)` accepts a no-argument host check returning a control event or `None`. Durable end hints drain already published tail data; original end events retain their cursor, and a synthetic end follows only a raw empty batch. Reset closes immediately and host permission exceptions propagate. Checks are disabled by default and import no host models.
+
+`encoded_archive_bytes(events, event_size=None)` and `fit_archive_events(..., event_size=None)` share a per-event size function, defaulting to model_dump sizing. Hosts with hidden persisted fields supply their actual record sizing; prefix fitting stays in one implementation.

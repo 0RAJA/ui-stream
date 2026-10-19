@@ -3,6 +3,7 @@
 """Pure archive integrity and bounded prefix operations; storage belongs to the host."""
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from ui_stream.types import Integrity
@@ -45,7 +46,7 @@ def _encoded_event_bytes(event: Any) -> int:
     return len(json.dumps(event.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
-def _encoded_archive_bytes(events: list[Any]) -> int:
+def encoded_archive_bytes(events: list[Any], *, event_size: Callable[[Any], int] | None = None) -> int:
     """计算事件列表序列化为 JSON 数组后的 UTF-8 紧凑编码总字节数。
 
     计算公式：2（首尾方括号） + 各元素编码字节之和 + (元素数 - 1)（逗号分隔符）。
@@ -53,6 +54,7 @@ def _encoded_archive_bytes(events: list[Any]) -> int:
 
     Args:
         events: 已有的事件列表。
+        event_size: 宿主实际持久记录的单事件字节计量；默认计量 model_dump。
 
     Returns:
         该列表序列化为紧凑 JSON 数组后的 UTF-8 字节数（空列表返回 2，即 "[]"）。
@@ -62,10 +64,17 @@ def _encoded_archive_bytes(events: list[Any]) -> int:
         # 空数组仍占用 "[]" 两个字节。
         return 2
     # 数组等于各元素编码之和，加上首尾方括号与元素间逗号，无需再整体编码一次。
-    return 2 + sum(_encoded_event_bytes(event) for event in events) + (len(events) - 1)
+    measure_event = event_size if event_size is not None else _encoded_event_bytes
+    return 2 + sum(measure_event(event) for event in events) + (len(events) - 1)
 
 
-def fit_archive_events(*, existing: list[Any], incoming: list[Any], max_bytes: int) -> tuple[list[Any], int, bool]:
+def fit_archive_events(
+    *,
+    existing: list[Any],
+    incoming: list[Any],
+    max_bytes: int,
+    event_size: Callable[[Any], int] | None = None,
+) -> tuple[list[Any], int, bool]:
     """在容量限制内按顺序追加尽可能多的事件，返回合并结果。
 
     设计意图：
@@ -77,6 +86,7 @@ def fit_archive_events(*, existing: list[Any], incoming: list[Any], max_bytes: i
         existing: 数据库中已有的归档事件列表。
         incoming: 本次待追加的新事件列表。
         max_bytes: 归档 JSON 数组的 UTF-8 字节上限。
+        event_size: 与 encoded_archive_bytes 相同的宿主持久记录计量。
 
     Returns:
         三元组 (merged, accepted_count, truncated):
@@ -90,10 +100,11 @@ def fit_archive_events(*, existing: list[Any], incoming: list[Any], max_bytes: i
 
     accepted: list[Any] = list(existing)
     accepted_count = 0
-    current_bytes = _encoded_archive_bytes(accepted)
+    measure_event = event_size if event_size is not None else _encoded_event_bytes
+    current_bytes = encoded_archive_bytes(accepted, event_size=measure_event)
     for event in incoming:
         # 追加一个元素会增加它自身的编码长度，以及非空数组所需的一个逗号。
-        candidate_bytes = current_bytes + _encoded_event_bytes(event) + (1 if accepted else 0)
+        candidate_bytes = current_bytes + measure_event(event) + (1 if accepted else 0)
         if candidate_bytes > max_bytes:
             # 单条事件放不下即停止，保持事件顺序连续，不跳跃保留后续事件。
             return accepted, accepted_count, True
