@@ -10,7 +10,7 @@ send 经 codec 校验/计量、实时发布，再进入缓冲与 checkpoint；fi
 import logging
 import threading
 import time
-from typing import Any, Generic
+from typing import Any, Callable, Generic
 from uuid import UUID
 
 from ui_stream.archive import merge_archive_status
@@ -36,6 +36,7 @@ class StreamRuntime(Generic[EventT]):
 
     使用方（宿主应用）先创建 execution 并组装三个端口，再反复 send，最后调用 finish。
     Runtime 把暂未归档的事件保存在 pending 缓冲中，达到阈值后交给 ArchiveStore。
+    policy 可为固定值或无参工厂；每次 send 共用一份策略，配置变化在下次发送时生效。
     实例内的 RLock 覆盖端口 I/O，保证同一实例按取得锁的顺序处理；不同实例/进程的
     执行隔离由宿主存储端校验。成功 finish 或 finish_retry 后，这个实例不再接受写入。
     """
@@ -48,7 +49,7 @@ class StreamRuntime(Generic[EventT]):
         codec: EventCodec[EventT],
         archive_store: ArchiveStore[EventT],
         archive_status: Integrity = Integrity.COMPLETE,
-        policy: StreamPolicy = StreamPolicy(),
+        policy: StreamPolicy | Callable[[], StreamPolicy] = StreamPolicy(),
         after_close: AfterClose | None = None,
         archive_errors: tuple[type[Exception], ...] = (ArchiveUnavailable,),
         live_errors: tuple[type[Exception], ...] = (LiveUnavailable, OSError),
@@ -62,7 +63,8 @@ class StreamRuntime(Generic[EventT]):
             codec: 将业务输入构造成事件，并提供实时/归档编码与字节计量。
             archive_store: 宿主实现的归档与最终结果存储端口。
             archive_status: 此次执行已有的归档状态，后续只会向更严重的状态合并。
-            policy: 业务事件容量、缓冲批量和活动刷新阈值。
+            policy: 固定 StreamPolicy 或返回它的无参工厂；构造时不执行工厂。
+                工厂只计算或读取配置，不应重入本实例的 send/finish/finish_retry。
             after_close: 关闭后接收 Summary 的可选观察者，在释放实例锁后调用。
             archive_errors: 中间归档时允许降级继续的异常类型；最终 commit 异常仍传播。
             live_errors: 业务实时发布时允许降级继续的异常类型。
@@ -137,8 +139,10 @@ class StreamRuntime(Generic[EventT]):
     def send(self, data: Any) -> EventT | None:
         """处理一条业务进度：构造并校验、尝试实时发布，再加入归档缓冲。
 
-        设计意图：先验证输入，避免把编码错误误当作后端故障；发布后再按可能新增的回执计量归档。
+        设计意图：发布前验证业务输入，避免把编码错误误当作后端故障；发布后按新增回执计量归档。
         达到 checkpoint 阈值会同步调用存储端，因此一次 send 也可能包含归档 I/O。
+        进入实例锁并确认未关闭后，只读取一次 policy；全部容量与活动判断共用这份快照。
+        工厂异常或返回类型错误在事件处理、计数及外部写入之前直接传播，不作为后端降级。
 
         Args:
             data: 交给 codec.business 的业务输入，结构和合法性由所选 codec 决定。
@@ -153,17 +157,19 @@ class StreamRuntime(Generic[EventT]):
 
         with self._lock:
             self._require_open()
+            # 本次发送共用同一策略，发布或归档期间配置变化只影响下一次 send。
+            policy = self.policy
             ui_event = self._codec.business(data)
             # 先编码：非法 data 属于接入错误，必须在任何降级判断前暴露。
             live_payload_size = len(self._codec.encode(ui_event, EncodingTarget.LIVE))
-            if not self._accept_business_event(payload_size=live_payload_size):
+            if not self._accept_business_event(payload_size=live_payload_size, policy=policy):
                 return None
             self._business_event_count += 1
             self._business_event_bytes += live_payload_size
-            ui_event = self._write_live(ui_event, payload_size=live_payload_size)
+            ui_event = self._write_live(ui_event, payload_size=live_payload_size, policy=policy)
             # publisher 可返回带回执的副本；按发布后的 ARCHIVE 编码计量，避免漏算回执占用。
             archive_payload_size = len(self._codec.encode(ui_event, EncodingTarget.ARCHIVE))
-            self._buffer(ui_event, payload_size=archive_payload_size)
+            self._buffer(ui_event, payload_size=archive_payload_size, policy=policy)
             return ui_event
 
     def finish_retry(self) -> None:
@@ -236,20 +242,20 @@ class StreamRuntime(Generic[EventT]):
             # 此时宿主结果已提交；通知失败只能影响当前汇总，不能回滚或重复提交结果。
             self._degrade("UI stream终止事件实时发布失败", status=Integrity.DEGRADED)
 
-    def _accept_business_event(self, *, payload_size: int) -> bool:
+    def _accept_business_event(self, *, payload_size: int, policy: StreamPolicy) -> bool:
         """拒绝超大的单事件，并在条数阈值后停止归档缓冲。
 
         条数触顶仍返回 True，允许业务统计和实时流继续；单事件拒绝则不计入业务统计。
         """
 
-        if payload_size > self.policy.max_event_bytes:
+        if payload_size > policy.max_event_bytes:
             self._degrade(
                 "UI stream流式事件超过单条上限",
                 status=Integrity.TRUNCATED,
                 extra={"payload_size": payload_size},
             )
             return False
-        if self._business_event_count >= self.policy.max_events:
+        if self._business_event_count >= policy.max_events:
             if not self._archive_stopped:
                 self._archive_stopped = True
                 self._degrade(
@@ -258,7 +264,7 @@ class StreamRuntime(Generic[EventT]):
                 )
         return True
 
-    def _write_live(self, event: EventT, *, payload_size: int) -> EventT:
+    def _write_live(self, event: EventT, *, payload_size: int, policy: StreamPolicy) -> EventT:
         """超出实时字节预算后停止业务发布；配置内故障降级并返回原事件，其他异常传播。
 
         仅成功返回的发布计入实时字节预算，网络结果不确定时不会自动重发或去重。
@@ -266,7 +272,7 @@ class StreamRuntime(Generic[EventT]):
 
         if self._live_stopped:
             return event
-        if self._live_business_bytes + payload_size > self.policy.max_live_bytes:
+        if self._live_business_bytes + payload_size > policy.max_live_bytes:
             self._live_stopped = True
             self._degrade("UI stream流式实时字节超过上限", status=Integrity.DEGRADED)
             return event
@@ -278,7 +284,7 @@ class StreamRuntime(Generic[EventT]):
         self._live_business_bytes += payload_size
         return published
 
-    def _buffer(self, event: EventT, *, payload_size: int) -> None:
+    def _buffer(self, event: EventT, *, payload_size: int, policy: StreamPolicy) -> None:
         """按归档编码字节约束 pending，并按条数、字节或活动时间触发 checkpoint。
 
         触顶时先尝试归档已有 pending；仍无容量才丢弃当前事件并停止后续缓冲。
@@ -289,10 +295,10 @@ class StreamRuntime(Generic[EventT]):
             # 存储刚好满时此前可能没有损失；开始丢弃这条新事件才确定发生截断。
             if self._archive_status != Integrity.TRUNCATED:
                 self._degrade("UI stream archive capacity exhausted", status=Integrity.TRUNCATED)
-            self._touch_activity_if_due()
+            self._touch_activity_if_due(policy=policy)
             return
         # 存储持续故障时 pending 无法清空，进程内缓冲仍须有界，不能依赖后端容量限制。
-        if self._pending_bytes + payload_size > self.policy.max_archive_bytes:
+        if self._pending_bytes + payload_size > policy.max_archive_bytes:
             # 缓冲触顶可能只是归档后端短暂故障。先用现有 pending 做最后一次恢复性
             # checkpoint；成功后继续接收当前事件，失败或持久归档已耗尽才截断。
             try:
@@ -302,20 +308,20 @@ class StreamRuntime(Generic[EventT]):
                     "UI stream流式缓冲触顶前归档失败",
                     status=Integrity.DEGRADED,
                 )
-        if self._archive_stopped or self._pending_bytes + payload_size > self.policy.max_archive_bytes:
+        if self._archive_stopped or self._pending_bytes + payload_size > policy.max_archive_bytes:
             self._archive_stopped = True
             self._degrade(
                 "UI stream流式待归档缓冲超过上限",
                 status=Integrity.TRUNCATED,
             )
-            self._touch_activity_if_due()
+            self._touch_activity_if_due(policy=policy)
             return
         self._pending.append(event)
         self._pending_bytes += payload_size
         if (
-            len(self._pending) >= self.policy.checkpoint_event_count
-            or self._pending_bytes >= self.policy.checkpoint_bytes
-            or self._activity_checkpoint_due()
+            len(self._pending) >= policy.checkpoint_event_count
+            or self._pending_bytes >= policy.checkpoint_bytes
+            or self._activity_checkpoint_due(policy=policy)
         ):
             try:
                 self._checkpoint()
@@ -345,15 +351,15 @@ class StreamRuntime(Generic[EventT]):
         if result.capacity_exhausted:
             self._archive_stopped = True
 
-    def _activity_checkpoint_due(self) -> bool:
+    def _activity_checkpoint_due(self, *, policy: StreamPolicy) -> bool:
         """仅在事件处理时检查活动间隔；没有后台定时线程，空闲时不会自行触发。"""
 
-        return time.monotonic() - self._last_activity_checkpoint_at >= self.policy.activity_interval_seconds
+        return time.monotonic() - self._last_activity_checkpoint_at >= policy.activity_interval_seconds
 
-    def _touch_activity_if_due(self) -> None:
+    def _touch_activity_if_due(self, *, policy: StreamPolicy) -> None:
         """停止归档后仍按事件到达节奏刷新活动；配置的归档故障继续按降级处理。"""
 
-        if not self._activity_checkpoint_due():
+        if not self._activity_checkpoint_due(policy=policy):
             return
         try:
             self._archive_store.touch_activity(binding=self._binding)
@@ -400,9 +406,17 @@ class StreamRuntime(Generic[EventT]):
 
     @property
     def policy(self) -> StreamPolicy:
-        """返回组装时的不可变阈值对象。"""
+        """返回当前策略；固定对象原样返回，工厂在每次读取时求值一次。
 
-        return self._policy
+        此属性保持只读；工厂返回非 StreamPolicy 时抛 TypeError，其自身异常直接传播。
+        """
+
+        policy = self._policy
+        if callable(policy) and not isinstance(policy, StreamPolicy):
+            policy = policy()
+            if not isinstance(policy, StreamPolicy):
+                raise TypeError("policy factory must return StreamPolicy")
+        return policy
 
     def _freeze_summary(self, *, status: str, error_code: str) -> Summary:
         """在锁内冻结当前计量和完整性，避免关闭回调再访问运行时状态。"""

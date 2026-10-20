@@ -2,7 +2,7 @@
 
 [简体中文](api.md) · [Documentation](README.en.md)
 
-Read [Architecture and concepts](architecture.en.md) first, then integrate through this lifecycle. Pin exact alpha version `0.1.0a1` and verify adapter contracts before upgrading. [types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define signatures; underscore-prefixed names are private.
+Read [Architecture and concepts](architecture.en.md) first, then integrate through this lifecycle. Pin exact alpha version `0.1.0a2` and verify adapter contracts before upgrading. [types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define signatures; underscore-prefixed names are private.
 
 ## 1. Create a Runtime
 
@@ -14,7 +14,7 @@ The host creates an execution, then passes its identity and three ports to `Stre
 | `codec` | Implements `business`, `terminal`, `encode`, defining input, event structure, terminal vocabulary, and byte representation. |
 | `publisher` | Implements synchronous `publish(event)`, returning the event for archiving, optionally with a real message-ID receipt. |
 | `archive_store` | Implements `checkpoint`, `touch_activity`, `commit` to save progress and the final business result. |
-| `policy` / `archive_status` | Capacity/batch thresholds and existing execution integrity; defaults are below. |
+| `policy` / `archive_status` | A fixed StreamPolicy or a no-argument factory returning one; plus existing execution integrity. See per-send semantics below. |
 | `live_errors` / `archive_errors` | Exception types allowed to degrade and continue. Defaults are `(LiveUnavailable, OSError)` and `(ArchiveUnavailable,)`; final commit errors still propagate. |
 | `after_close` / `closed_error` | Optional close observer. Using `send`/`finish` after closure raises `ClosedStream` by default; custom types must support no-argument construction. |
 
@@ -44,6 +44,42 @@ A returned event does not prove publication or persistence: degraded live writes
 | Post-commit terminal publication / `after_close` fails | Catch `Exception` without changing the committed result. Terminal failure degrades memory integrity without writing it back to storage. |
 
 ## 3. Configure capacity and batches
+
+### Fixed policies and configuration per send
+
+`policy=StreamPolicy(...)` retains fixed-policy behavior. Alternatively, pass `policy=current_policy`, a no-argument factory returning a `StreamPolicy`. The default remains a fixed object, and Runtime construction does not invoke factories.
+
+Factory support starts in `0.1.0a2`; `0.1.0a1` supports fixed policies only. Hosts needing dynamic configuration should pin `0.1.0a2` or newer and verify adapter contracts.
+
+Each `send` acquires the instance lock, checks that it is open, then invokes the factory once. Event size, live budget, pending, checkpoint, and activity decisions all use that policy. Configuration changes take effect on the next `send`, including checking existing pending against new thresholds:
+
+```python
+from examples.counter import make_counter
+from ui_stream import StreamPolicy
+
+limits = {"checkpoint_event_count": 2}
+
+
+def current_policy():
+    return StreamPolicy(**limits)
+
+
+runtime, channel, store = make_counter(policy=current_policy)
+runtime.send(4)
+assert store.snapshot.latest is None
+limits["checkpoint_event_count"] = 1
+runtime.send(9)
+assert store.snapshot.latest == 9
+runtime.finish(status="DONE", completion=13)
+```
+
+A real host can read its own configuration in the factory, such as Django settings, without adding Django to the library. Factories should only compute or read configuration. Keep them lightweight and free of backend I/O; do not call `send` / `finish` / `finish_retry` on the same Runtime from a factory. Factory exceptions propagate; a non-`StreamPolicy` result raises `TypeError`. Both occur before business-event processing, counters, or external writes, and are not treated as live/archive degradation.
+
+`finish` / `finish_retry` do not use policy thresholds and do not invoke the factory. A closed `send` raises `ClosedStream` first, without a factory call. `runtime.policy` remains read-only: fixed values are returned unchanged; each external property read invokes a factory again. Separate property reads are not a single dynamic snapshot.
+
+Policy updates do not reset cumulative event/byte counts or restart already stopped live publication/archive buffering. Existing integrity does not recover. Updates change future threshold decisions, not execution state or background scheduling.
+
+### Capacity and batch thresholds
 
 These limits govern business progress; terminals use a separate commit/publication path. Bytes come from codec encoding, not raw `data` size.
 

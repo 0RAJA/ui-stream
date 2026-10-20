@@ -7,7 +7,7 @@ make_counter 组装自定义事件、文本编码、内存发布器和快照存�
 
 import threading
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from ui_stream import StreamPolicy, StreamRuntime
@@ -116,10 +116,13 @@ def counter_binding() -> Binding:
     return Binding(resource_id="counter:example", task_id="counter-task", execution_id=uuid4())
 
 
-def make_counter(*, policy: StreamPolicy = StreamPolicy(), after_close: AfterClose | None = None):
+def make_counter(
+    *, policy: StreamPolicy | Callable[[], StreamPolicy] = StreamPolicy(), after_close: AfterClose | None = None
+):
     """组装独立内存 Counter，返回 (runtime, publisher, store)。
 
-    可传入 StreamPolicy 调整归档阈值，或用 after_close 观察结束摘要。
+    policy 可传固定 StreamPolicy 或无参工厂；工厂由 Runtime 在每次 send 开始时求值。
+    after_close 可观察结束摘要，固定策略仍按原阈值处理。
     随后调用 runtime.send(非负整数)，最后 finish(status="DONE", completion=求和结果)。
     """
 

@@ -11,7 +11,7 @@ ui-stream 适合已经有后台任务和业务存储的 Python 应用。它负�
 需要 Python ≥3.11 和已启用的虚拟环境。仅安装库时固定 alpha 版本，import 名为 `ui_stream`：
 
 ```sh
-python -m pip install ui-stream==0.1.0a1
+python -m pip install ui-stream==0.1.0a2
 ```
 
 要运行示例，请先取得本仓库，并在**仓库根目录**执行以下命令。Counter 和 Demo 不包含在 wheel/sdist 中，不能仅安装 PyPI 包后直接运行：

@@ -11,7 +11,7 @@ ui-stream fits Python applications that already own background tasks and busines
 Use Python ≥3.11 and an activated virtual environment. To install only the library, pin the alpha version; its import name is `ui_stream`:
 
 ```sh
-python -m pip install ui-stream==0.1.0a1
+python -m pip install ui-stream==0.1.0a2
 ```
 
 To run examples, obtain this repository and run the following from its **root directory**. Counter and the Demo are not included in wheel/sdist, so installing the PyPI package alone does not provide these commands:

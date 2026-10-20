@@ -18,10 +18,10 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
-python -m tools.verify_distribution --dist dist --check-tag v0.1.0a1
+python -m tools.verify_distribution --dist dist --check-tag v0.1.0a2
 ```
 
-Use `v0.1.0a1` and the prerelease flag for this alpha. Required CI must cover the release commit; creating a GitHub Release does not confirm a PyPI upload.
+Use `v0.1.0a2` and the prerelease flag for this alpha. Required CI must cover the release commit; creating a GitHub Release does not confirm a PyPI upload.
 
 ## Trusted Publisher configuration
 

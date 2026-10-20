@@ -2,7 +2,7 @@
 
 [English](api.en.md) · [文档导航](README.md)
 
-先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。alpha 阶段固定精确版本 `0.1.0a1`，升级前验证自己的适配器契约；签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
+先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。alpha 阶段固定精确版本 `0.1.0a2`，升级前验证自己的适配器契约；签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
 
 ## 1. 创建 Runtime
 
@@ -14,7 +14,7 @@
 | `codec` | 实现 `business`、`terminal`、`encode`，决定输入数据、事件结构、终态词汇和字节表示。 |
 | `publisher` | 实现同步 `publish(event)`，返回后续归档用的事件，可附加真实消息 ID 回执。 |
 | `archive_store` | 实现 `checkpoint`、`touch_activity`、`commit`，保存进度与最终业务结果。 |
-| `policy` / `archive_status` | 容量/批量阈值，以及此次执行已有的归档状态；默认见下表。 |
+| `policy` / `archive_status` | 固定 StreamPolicy 或返回它的无参工厂，以及此次执行已有的归档状态；按次求值规则见下文。 |
 | `live_errors` / `archive_errors` | 允许降级继续的异常类型。默认分别为 `(LiveUnavailable, OSError)` 与 `(ArchiveUnavailable,)`；最终 commit 不吞异常。 |
 | `after_close` / `closed_error` | 可选关闭观察者；关闭后调用 `send`/`finish` 默认抛 `ClosedStream`，自定义异常须支持无参构造。 |
 
@@ -44,6 +44,42 @@
 | 提交后的终态发布 / `after_close` 失败 | 捕获 `Exception`，不改变已提交结果；终态发布失败会使内存状态降级，但不回写持久记录。 |
 
 ## 3. 配置容量和归档批量
+
+### 固定策略与按次读取配置
+
+`policy=StreamPolicy(...)` 保持原有固定策略行为；也可以传入 `policy=current_policy`，其中工厂无参并返回一份 `StreamPolicy`。默认仍是固定对象，构造 Runtime 时不调用工厂。
+
+工厂支持从 `0.1.0a2` 开始提供；`0.1.0a1` 仅支持固定策略。需要动态配置的宿主应固定 `0.1.0a2` 或更新版本，并验证适配器契约。
+
+每次 `send` 在实例锁内先确认未关闭，再调用工厂一次；当前事件的大小、实时预算、归档缓冲、checkpoint 和活动刷新都使用这份策略。配置变化从下一次 `send` 生效，已有 pending 会按新阈值检查。例如：
+
+```python
+from examples.counter import make_counter
+from ui_stream import StreamPolicy
+
+limits = {"checkpoint_event_count": 2}
+
+
+def current_policy():
+    return StreamPolicy(**limits)
+
+
+runtime, channel, store = make_counter(policy=current_policy)
+runtime.send(4)
+assert store.snapshot.latest is None
+limits["checkpoint_event_count"] = 1
+runtime.send(9)
+assert store.snapshot.latest == 9
+runtime.finish(status="DONE", completion=13)
+```
+
+实际宿主可在工厂内读取自己的配置并构造策略，例如 Django settings；库不导入 Django。工厂只计算或读取配置，应轻量、无后端 I/O，也不要调用同一 Runtime 的 `send` / `finish` / `finish_retry`。工厂自身异常直接传播，返回非 `StreamPolicy` 抛 `TypeError`，均发生在业务事件处理、计数和外部写入之前；不会作为实时/归档故障降级。
+
+`finish` / `finish_retry` 不使用策略阈值，不额外调用工厂；关闭后 `send` 先抛 `ClosedStream`，也不调用工厂。`runtime.policy` 仍是只读属性：固定值原样返回，工厂模式每次外部读取都会重新求值。不要依赖多次属性读取取得同一份动态配置。
+
+更新策略不清零累计事件/字节，也不重新启动已经停止的实时发布或归档缓冲；已记录的完整性不会恢复。它改变的是后续判断使用的阈值，不会重建执行状态或自动启动定时器。
+
+### 容量与批量阈值
 
 以下限制针对业务进度，终态另走 commit 和实时通知。字节来自 codec 编码，不是原始 `data` 大小。
 
