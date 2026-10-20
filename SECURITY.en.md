@@ -9,7 +9,7 @@ This volunteer project promises no response SLA. Only the latest alpha is suppor
 | Boundary | Responsibility |
 | --- | --- |
 | Host | Permissions, cross-process fencing, actual atomic transactions, retries/restarts, retention |
-| Runtime | Process-local serialization; accepted events/nested values remain immutable; configure recoverable errors narrowly |
+| Runtime | Serializes calls only within one Runtime instance, not across instances/processes; callers and adapters must not mutate accepted events or nested data; configure recoverable errors narrowly |
 | Demo | Loopback and synthetic data only, no authentication; dedicated SQLite; restart interrupts rather than resumes computation |
 | Release checks | Patterns and allowlists do not prove the absence of every secret, PII item, or undisclosed sensitive meaning |
 

@@ -1,30 +1,54 @@
-# Architecture and extensions
+# Architecture and integration
 
 [简体中文](architecture.md) · [Documentation](README.en.md)
 
+Start with the complete [Counter implementation](../examples/counter.py): a task sends progress values 4 and 9, storage retains latest value 9, and completion commits business result 13. Real tasks use the same Runtime call order with different events, channels, and storage.
+
+## Understand the data first
+
+| Concept | Meaning here |
+| --- | --- |
+| Host | The application using ui-stream, which already owns scheduling, user permissions, and business storage. |
+| Execution | One particular run of a task; the host decides whether retries or replacements receive a new execution ID. |
+| Business event | One progress update, possibly data used to update a snapshot; it need not be JSON. |
+| pending | Runtime's buffer of events not yet successfully handled by the archive port, not durable history. |
+| checkpoint | Passing the whole pending batch to storage to update progress; it does not make computation resumable. |
+| Snapshot / final result | A snapshot restores current UI progress; the final result is the task's business output, passed to storage as `completion`. |
+
+A snapshot may be a latest value, accumulated state, or a bounded event list. It need not retain all history. `Integrity` tracks failures or truncation in progress history separately from business success/failure: a task may succeed even though some live progress was unavailable.
+
+## Assemble three ports
+
+A “port” is an implementation object with agreed methods. Your classes can satisfy the [Protocols](../src/ui_stream/types.py) without inheriting Runtime or the default event class.
+
 ![Three ports and host boundaries](diagrams/architecture.en.png)
 
-| Port | Owns | Does not own |
+| Object | Implement | How Runtime uses it |
 | --- | --- | --- |
-| `EventCodec` | Business/terminal construction and LIVE/ARCHIVE encoding | I/O or mutation of accepted events |
-| `LivePublisher` | Execution-bound publication; may return a new receipt-bearing event | Business-content changes or result transactions |
-| `ArchiveStore` | `checkpoint`, activity updates, atomic `commit` | Permissions, scheduling, automatic redelivery |
+| `EventCodec` | `business(data)`, `terminal(status)`, `encode(event, target)` | Construct progress/terminal events, validate and measure bytes, without backend I/O. |
+| `LivePublisher` | `publish(event)` | Publish synchronously; return a new receipt-bearing event if the backend generates a message ID. |
+| `ArchiveStore` | `checkpoint(...)`, `touch_activity(...)`, `commit(...)` | Save progress batches, refresh activity, and atomically save the tail, terminal event, and result at completion. |
 
-`StreamRuntime` coordinates bounded buffering, serialized calls, degradation, and closure. The host supplies execution identity and fencing, true transaction boundaries, result types, and snapshot representation.
-The core knows no Redis key/TTL/read operations. `after_close` receives a frozen Summary once and cannot participate in the transaction.
+The host creates an execution, combines resource/task/execution IDs into a `Binding`, and supplies it to Runtime. Storage must verify that this execution may still write and reject replaced executions. This is **fencing: isolating stale writers**. It prevents old tasks from overwriting new results; user authorization, scheduling, and snapshot queries remain host responsibilities.
 
-## Completion order
+## From progress to a committed result
+
+1. The task repeatedly calls `send(data)`. Runtime constructs an event, validates its LIVE encoding, attempts publication, then measures its ARCHIVE encoding and buffers it. The representations may differ: archive data can include an ID obtained only after publication.
+2. A pending count, byte, or activity-time threshold triggers a synchronous `checkpoint`. Only success clears the batch. Configured storage failures retain the buffer and record degradation; subsequent events can trigger recovery. Time checks are event-driven, with no background thread during idle periods.
+3. After computing the result, the task calls `finish(status=..., completion=...)`; the sequence below commits before notification.
+
+One Runtime lock covers these calls and port I/O, so business threads may wait for publication or database operations. It cannot establish order or execution isolation across instances or processes. Do not mutate events or nested data after passing them to Runtime; codecs and publishers follow the same convention.
 
 ![Commit before closure and terminal publication; notify last](diagrams/completion.en.png)
 
-| Condition | Result |
+| Condition | Subsequent behavior and reason |
 | --- | --- |
-| `commit` succeeds | Tail, terminal, and result are committed atomically before closure and live/observer attempts |
-| `commit` raises | Propagate; retain pending/open state; no terminal publication or notification |
-| Publication/notification fails after commit | Isolate ordinary exceptions; the durable result cannot be undone |
+| `commit` succeeds | Storage has committed tail, terminal event, and result in one transaction. Runtime then closes and attempts live completion, so notified readers can already read the result. |
+| `commit` raises | Propagate, retain pending and open state, and send no live terminal or observer notification. The host checks the commit outcome before deciding to retry. |
+| Terminal publication fails after commit | Catch `Exception` and degrade in-memory integrity; do not undo or repeat the commit, or write that late degradation back to storage. |
+| `after_close` observer fails | Catch `Exception` and log it so a completed commit is not reported as needing retry. The observer receives a body-free `Summary` outside the lock. |
 
-`send` constructs and validates, publishes, encodes for archive, then buffers. Archive encoding may fail after a live receipt, so encoding must be deterministic and free of I/O. Never mutate accepted events or nested data.
-Only successful checkpoints clear pending. Only configured infrastructure errors degrade; fencing and programming errors propagate. Integrity only advances COMPLETE → DEGRADED → TRUNCATED.
+Publication and database commit are separate operations, not an automatic cross-system transaction. Timeouts may leave writes uncertain, so hosts also design retry idempotency. An execution ID or process lock alone does not provide exactly-once delivery. See the [API](api.en.md) for capacity and per-stage failure rules.
 
 <details><summary>Editable GitHub sequence</summary>
 
@@ -45,6 +69,8 @@ sequenceDiagram
 
 </details>
 
-Counter uses dataclasses, text frames, and an in-memory latest-value snapshot. The SQLite Demo owns its events and transactions. Both compose public ports only.
-JSON/Pydantic, Redis, the Redis-only reader/SSE, and JSON-prefix helpers are optional profiles, not a generic reader for arbitrary channels.
-See [API](api.en.md) and [types.py](../src/ui_stream/types.py).
+## UI reads and recovery
+
+Runtime coordinates writes. The library has no generic snapshot-query or archive-replay port. Hosts expose read endpoints, load snapshots/results on open or reconnect, follow live events, and handle gaps according to their cursor and retention policy.
+
+The [SQLite Demo](../demos/sqlite/README.en.md) demonstrates this with custom JSON events, integer cursors, a memory tail, and SQLite. It does not use the optional Pydantic/Redis modules. The default [Redis reader and SSE encoder](api.en.md) use default `Event` objects and Redis-format cursors and cannot directly read the Demo's integer-cursor protocol.

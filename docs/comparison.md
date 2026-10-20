@@ -13,7 +13,7 @@
 接入前需接受这些成本与边界：
 
 - 宿主实现端口、授权、读取、事务和任务生命周期；同步调用可能阻塞，ASGI 需安排线程或适配层。
-- 现成 reader/SSE 仅面向 Redis profile；HTTP 队列、客户端积压和存储保留由适配器管理。
+- 现成 reader 按 Redis 游标读取，默认 SSE 编码器使用默认 Event 和 Redis 格式 ID；其他协议可像 Demo 自行实现。HTTP 队列、客户端积压和存储保留由适配器管理。
 - `max_events` 是累计归档预算，达到后快照可能停止而 live/result 继续。无限期 latest-value 服务需另选策略，见 [API](api.md)。
 
 如果已有 SSE、事件存储或 agent 流满足需求，通常不必再引入这层协调。端口与完成顺序详见[架构](architecture.md)。

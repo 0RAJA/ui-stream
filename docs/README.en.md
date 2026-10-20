@@ -2,10 +2,14 @@
 
 [简体中文](README.md) · [Project home](../README.en.md)
 
+For a first integration, follow the first three rows: run an example, understand objects and call order, then look up parameters and failure behavior.
+
 | Goal | Start here |
 | --- | --- |
-| Run it and understand boundaries | [README](../README.en.md) / [SQLite Demo](../demos/sqlite/README.en.md) |
-| Connect tasks, channels, and storage | [Architecture and sequence](architecture.en.md) / [API](api.en.md) |
+| Understand the purpose and run a complete example | [README](../README.en.md) / [Counter source](../examples/counter.py) |
+| Connect tasks, channels, and storage | [Architecture and integration](architecture.en.md): executions, snapshots, three ports, completion order |
+| Look up inputs, outputs, limits, and failures | [API](api.en.md): lifecycle, capacity, integrity, Redis/SSE, archive helpers |
+| Explore browser interaction, persistence, and recovery | [SQLite Demo](../demos/sqlite/README.en.md) |
 | Inspect measurements and related tools | [Performance charts and acceptance](performance.en.md) / [Choosing a solution](comparison.en.md) |
 | Contribute or report vulnerabilities | [Contributing](../CONTRIBUTING.en.md) / [Security](../SECURITY.en.md) |
 | Build and publish | [Release process](releasing.en.md) |

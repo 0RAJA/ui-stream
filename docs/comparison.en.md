@@ -13,7 +13,7 @@ When the host already schedules background work and owns business-result transac
 Accept these integration costs and boundaries:
 
 - The host implements ports, authorization, reads, transactions, and task lifecycle. Synchronous calls may block; ASGI needs threads or an adapter.
-- Supplied reader/SSE helpers target the Redis profile. Adapters manage HTTP queues, client backlog, and storage retention.
+- The supplied reader uses Redis cursors; the default SSE encoder uses default Event objects and Redis-format IDs. Other protocols can provide their own implementation, as the Demo does. Adapters manage HTTP queues, client backlog, and storage retention.
 - `max_events` is a cumulative archive budget. Snapshots may stop while live progress/results continue; indefinite latest-value services need a different policy. See [API](api.en.md).
 
 If existing SSE, event storage, or agent streams meet your needs, this coordination layer may be unnecessary. See [architecture](architecture.en.md) for ports and completion order.

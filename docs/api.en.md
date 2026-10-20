@@ -1,48 +1,116 @@
-# API contracts
+# API: assembly, calls, and failures
 
 [简体中文](api.md) · [Documentation](README.en.md)
 
-Pin the exact alpha version `0.1.0a1`; run your adapter contracts before upgrading. Names beginning with an underscore are private.
-[types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define authoritative signatures.
+Read [Architecture and concepts](architecture.en.md) first, then integrate through this lifecycle. Pin exact alpha version `0.1.0a1` and verify adapter contracts before upgrading. [types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define signatures; underscore-prefixed names are private.
 
-| Entry | Methods / types |
+## 1. Create a Runtime
+
+The host creates an execution, then passes its identity and three ports to `StreamRuntime`. See the complete [Counter](../examples/counter.py); for durable transactions and UI reads, see the [SQLite Demo](../demos/sqlite/README.en.md).
+
+| Constructor argument | Supply and purpose |
 | --- | --- |
-| `StreamRuntime` | `send` / `finish` / `finish_retry` |
-| `EventCodec` | `business` / `terminal` / `encode` |
-| `LivePublisher` | `publish` |
-| `ArchiveStore` | `checkpoint` / `touch_activity` / `commit` |
-| `after_close` | `Summary` |
+| `binding` | `Binding(resource_id, task_id, execution_id)`, or the same read-only attributes. Every storage call carries it for host ownership checks. |
+| `codec` | Implements `business`, `terminal`, `encode`, defining input, event structure, terminal vocabulary, and byte representation. |
+| `publisher` | Implements synchronous `publish(event)`, returning the event for archiving, optionally with a real message-ID receipt. |
+| `archive_store` | Implements `checkpoint`, `touch_activity`, `commit` to save progress and the final business result. |
+| `policy` / `archive_status` | Capacity/batch thresholds and existing execution integrity; defaults are below. |
+| `live_errors` / `archive_errors` | Exception types allowed to degrade and continue. Defaults are `(LiveUnavailable, OSError)` and `(ArchiveUnavailable,)`; final commit errors still propagate. |
+| `after_close` / `closed_error` | Optional close observer. Using `send`/`finish` after closure raises `ClosedStream` by default; custom types must support no-argument construction. |
 
-Public modules: `ui_stream`, `ui_stream.types`, `ui_stream.exceptions`. Optional profiles live in `codec`, `redis`, `reader`, `sse`, `archive`.
-Default `JsonEventCodec` uses SUCCESS/FAILED; custom codecs may use unrelated events and terminal vocabularies.
+Initialization stores ports and configuration; it creates no durable execution and performs no backend I/O. The host creates/closes clients; Runtime has no general client-close method.
 
-| `StreamPolicy` | Default |
+## 2. Send progress and finish
+
+| Method | Input and output | Call when |
+| --- | --- | --- |
+| `send(data)` | Codec interprets `data`; returns the event for archiving, possibly with a receipt, or `None` for an oversized single event. | Progress is produced; may synchronously trigger a checkpoint. |
+| `finish(status=..., completion=..., error_code="")` | Codec constructs a terminal from `status`; store saves `completion`; `error_code` only enters the close summary. Returns `None`. | Computation finishes; commit before closure and notification. |
+| `finish_retry()` | Attempts a checkpoint and closes, without a final result or terminal event; repeated calls after closure return immediately. | The host prepares a retry or exits this run; it does not reschedule work itself. |
+
+Default `JsonEventCodec.terminal` accepts only `SUCCESS` / `FAILED`. Counter uses `DONE` / `FAILED`; Demo defines `DONE` / `ERROR` / `INTERRUPTED`. These codec business statuses are separate from `Integrity`.
+
+A returned event does not prove publication or persistence: degraded live writes may return the original event, and archiving may still be pending. Terminal encoding or commit failures retain pending/open state; the host identifies the cause and whether a commit occurred before retrying. `finish_retry` still closes on configured archive failures, so it is not a durable-save acknowledgment.
+
+### Failures by stage
+
+| Stage | Runtime / reader behavior |
 | --- | --- |
-| `max_event_bytes` | 256 KiB |
-| `max_events` | 10000 |
-| `max_live_bytes` / `max_archive_bytes` | 10 MiB each |
-| `activity_interval_seconds` | 60 |
-| `checkpoint_event_count` / `checkpoint_bytes` | 20 / 256 KiB |
+| Invalid event construction/encoding or cursor | `InvalidEvent` / `InvalidCursor` and similar errors propagate; correct the input. |
+| Business publication raises `live_errors` | Record `DEGRADED`, continue archiving; later events may still publish. |
+| Intermediate checkpoint / activity update raises `archive_errors` | Record `DEGRADED`; failed checkpoints retain pending, allowing recovery on later events. |
+| Default `StaleExecution` or other unconfigured port errors | Propagate to the host; stale writers are not transient network failures. |
+| Final `commit` fails | Always propagate; no close, live terminal, or observer notification. Storage owns transactions and retry idempotency. |
+| Post-commit terminal publication / `after_close` fails | Catch `Exception` without changing the committed result. Terminal failure degrades memory integrity without writing it back to storage. |
 
-An oversized single event makes `send` return None. The event cap stops new archive buffering; the live-byte cap stops new business publication, while terminal publication is still attempted.
-Stores enforce their own durable snapshot cap. Activity updates are driven by `send`, not a timer.
-`finish_retry` checkpoints and closes without constructing a terminal event or committing a final result.
+## 3. Configure capacity and batches
 
-For host adoption, pin the extra/version, remove embedded `ui_stream` to prevent shadowing, regenerate dependency locks, and verify the import location. Keep models, permissions, transactions, and task exceptions in the host.
+These limits govern business progress; terminals use a separate commit/publication path. Bytes come from codec encoding, not raw `data` size.
 
-## Finite archive budgets and truthful integrity
+| `StreamPolicy` field | Default | Threshold behavior |
+| --- | --- | --- |
+| `max_event_bytes` | 256 KiB | A single LIVE encoding **over** this size is rejected; `send` returns None and records TRUNCATED. |
+| `max_events` | 10000 | The first 10000 business events passing single-size validation consume the budget; further events stop new archive buffering and record TRUNCATED, while live publication may continue. |
+| `max_live_bytes` | 10 MiB | If another successful-publication LIVE byte total would exceed budget, permanently stop business publication in this instance and record DEGRADED. |
+| `max_archive_bytes` | 10 MiB | Bounds the sum of pending ARCHIVE bytes. First try to archive existing pending; if the new event still cannot fit, discard it, stop future buffering, and record TRUNCATED. Excludes durable array/envelope overhead. |
+| `checkpoint_event_count` / `checkpoint_bytes` | 20 / 256 KiB | Pending count or ARCHIVE bytes reaching the threshold trigger a synchronous checkpoint. |
+| `activity_interval_seconds` | 60 seconds | Check on event arrival: checkpoint normally, or `touch_activity` after archiving stops; not a background heartbeat. |
 
-`max_events` is the cumulative archive-event budget for one execution, not the pending batch size. With a budget of 2 and a checkpoint per event, sending 1–4 can leave the latest snapshot at 2 while live progress and the final business result reach 4, with TRUNCATED integrity. This policy still applies when the store retains only a constant-size latest value. Budget finite tasks explicitly; long tasks need explicit execution rotation or a policy/implementation suitable for an unlimited latest value. The defaults are not an unlimited snapshot service.
+`max_events` is cumulative for one execution and does not reset after checkpoints. With a budget of 2 and a checkpoint per event, sending 1–4 can leave the latest snapshot at 2 while live progress and the final result reach 4. Even a constant-space latest-value store is subject to this policy. Long tasks need an explicit budget or execution-rotation plan; there is no built-in unlimited-latest-value switch.
 
-`Checkpoint(capacity_exhausted=True)` stops future archive buffering. A batch that exactly fills storage without dropping anything may remain COMPLETE; the next actually discarded event raises TRUNCATED. `Summary` flags also reflect integrity supplied at construction.
+`StreamPolicy` does not validate configuration. The store separately limits the **entire durable snapshot**; Runtime's pending bound is not a database archive cap.
 
-## Optional Redis reader
+## 4. Interpret integrity, receipts, and close summaries
 
-`normalize_cursor` accepts two ASCII uint64 Redis stream-ID components. The reader does not provide authorization, initial snapshots, or replay on reconnect.
-With `decode_responses=False`, the adapter can skip dirty payloads individually and advance real entry IDs. Normal string responses are also supported. A `decode_responses=True` client can fail on invalid UTF-8 before returning any entry, however; this becomes `LiveUnavailable` and ends the current reader so the host can reload a snapshot. No unknown cursor is guessed, and skipping that entry is not promised.
+Despite the name `archive_status`, live-channel failures also enter this state to signal possibly missing UI progress:
 
-## Host state checks and archive sizing
+| `Integrity` | Meaning |
+| --- | --- |
+| `COMPLETE` | No known live/archive failure or discarded event; not a promise to retain complete history forever. |
+| `DEGRADED` | A recoverable backend failure occurred or the live budget stopped publication; the task may still succeed. |
+| `TRUNCATED` | Progress was discarded due to event size, cumulative count, pending, or storage capacity. |
 
-`iter_live(..., state_check=None, state_poll_interval=15)` accepts a no-argument host check returning a control event or `None`. Durable end hints drain already published tail data; original end events retain their cursor, and a synthetic end follows only a raw empty batch. Reset closes immediately and host permission exceptions propagate. Checks are disabled by default and import no host models.
+`merge_archive_status(current, incoming)` preserves the more severe state; later success does not erase earlier issues. Storage returns `Checkpoint(archive_status, capacity_exhausted)` only after handling the whole batch. Exactly filling capacity without dropping data may remain COMPLETE; the next discarded event raises TRUNCATED.
 
-`encoded_archive_bytes(events, event_size=None)` and `fit_archive_events(..., event_size=None)` share a per-event size function, defaulting to model_dump sizing. Hosts with hidden persisted fields supply their actual record sizing; prefix fitting stays in one implementation.
+After closure, `after_close(summary)` runs once outside the lock. `Summary.status` is the finish business status or `RETRY`. `degraded` / `truncated` independently record observed conditions, may both be true, and include initial integrity. `event_count` / `event_bytes` accumulate after single-size validation and before publication: **they are not successful publication/archive counts** and exclude terminals. Summary contains no event body or Runtime reference. Post-commit terminal failure may be reflected only in memory and the summary.
+
+## 5. Choose an event and read protocol
+
+`ui_stream`, `types`, `exceptions`, and `archive` work with the standard-library core. Default `codec`, `reader`, and `sse` require `[json]`; actual `RedisLiveStore` also needs `[redis]`. An optional profile is a ready-made set of events/adapters; the core does not require it.
+
+Default `Event(event=None, data=...)` is business progress. `ControlEvent.STREAM_END` ends a stream; `STREAM_RESET` asks the host to reselect an execution. `stream_id` carries an ID actually generated by Redis; host-generated control hints normally leave it empty rather than inventing a resume position. Field assignment is frozen, but nested `data` is not deeply frozen and must not be mutated after acceptance. Default JSON encoding rejects NaN/Infinity.
+
+### Redis tail to SSE
+
+For writes, wrap `RedisLiveStore` in `BoundRedisPublisher(store, execution_key)` and pass it as `StreamRuntime.publisher`, with a matching `JsonEventCodec()`. Reads use the same store and execution key. The host creates/closes the Redis client and injects it into the store; see [redis.py](../src/ui_stream/redis.py) for adapter constructors.
+
+The host authorizes the request, selects an execution/key, and supplies an existing store to this function. The HTTP layer sends/flushes its frames; the function does not create an HTTP response or query snapshots:
+
+```python
+from ui_stream.reader import iter_live, normalize_cursor
+from ui_stream.sse import encode_sse_event, encode_sse_heartbeat
+
+
+def sse_frames(store, key, last_event_id, state_check=None):
+    cursor = normalize_cursor(last_event_id)
+    for event in iter_live(
+        redis_store=store, redis_key=key, cursor=cursor, state_check=state_check
+    ):
+        yield encode_sse_heartbeat() if event is None else encode_sse_event(event)
+```
+
+`normalize_cursor` turns empty/false values into `0-0`; otherwise it requires two ASCII decimal uint64 components, preserving valid leading zeroes. It checks neither event existence nor permissions. `iter_live` yields Event or None; the host encodes None as an SSE comment heartbeat. Heartbeats advance neither cursor nor business-idle time. The example uses `block_ms=15000` (up to 15 seconds per read) and `idle_timeout=300` (a 5-minute business-idle deadline). With the default absence of state hints, reaching that deadline without business events also ends iteration. Adjust both for long tasks as needed; see [reader.py](../src/ui_stream/reader.py).
+
+Long connections can use `state_check` to recheck permission and execution validity. It takes no arguments, defaults to a 15-second first/subsequent interval, and returns a control Event or None; permission exceptions propagate. A host end hint first drains published tail data without blocking. A real end retains its cursor; otherwise a raw empty read releases the synthetic end. A dirty-payload-only batch is not an empty tail. Reset hints close the old stream immediately.
+
+Each `RedisLiveStore` append executes XADD and sliding TTL refresh within Lua, returning a new event with the real ID; no automatic resend/deduplication. Prefer `decode_responses=False` so bad payloads can be skipped individually while the scan cursor advances. If client pre-decoding fails before returning any ID, it becomes LiveUnavailable. Configured read errors end iteration **without synthesizing completion**; snapshot reload and reconnect policy belong to the host. In the default adapter `block_ms<=0` means nonblocking, not Redis `BLOCK 0`'s infinite wait.
+
+### Host-owned bounded JSON event lists
+
+`encoded_archive_bytes(events, event_size=...)` measures a complete compact JSON array, including brackets and commas; default per-record sizing uses `model_dump(mode="json")`. `fit_archive_events(existing=..., incoming=..., max_bytes=..., event_size=...)` returns **(new list, accepted incoming count, whether incoming was discarded)**. It keeps existing data plus a fitting contiguous prefix, without modifying input lists or deduplicating.
+
+If persisted records contain fields excluded from public serialization, `event_size` must include them. Its sizing must match actual compact JSON encoding to equal storage size. These helpers only measure and fit; queries, transactions, permissions, and archive replay stay in the host.
+
+## 6. Migrate embedded source
+
+Pin the needed version/extra, remove embedded `ui_stream` to avoid shadowing the installed package, regenerate locks, and verify the actual import location. Keep business models, permissions, task exceptions, transactions, and read endpoints in the host. Repository examples/Demo are not business dependencies available inside the wheel.

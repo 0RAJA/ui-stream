@@ -1,6 +1,11 @@
 # Copyright (C) 2023 THL A29 Limited, a Tencent company. All rights reserved.
 # SPDX-License-Identifier: MIT
-"""Pure archive integrity and bounded prefix operations; storage belongs to the host."""
+"""提供归档完整性合并、紧凑 JSON 数组计量与有界前缀追加的纯函数。
+
+宿主在自己的存储事务内调用，再决定如何保存完整性和已接收的前缀。
+event_size 可对齐包含宿主隐藏字段的真实编码；已有列表不会被这些函数修改。
+快照查询、权限、持久化和归档回放由宿主实现，这里没有读取或回放端口。
+"""
 
 import json
 from collections.abc import Callable
@@ -12,17 +17,18 @@ _ARCHIVE_STATUS_PRIORITY = {Integrity.COMPLETE: 0, Integrity.DEGRADED: 1, Integr
 
 
 def merge_archive_status(current: Integrity, incoming: Integrity) -> Integrity:
-    """返回两个归档状态中更严重的一个（单向升级语义）。
+    """返回两个归档状态中更严重的一个，保留本次执行已知的降级情况。
 
     设计意图：归档状态在同一次执行内只允许从 COMPLETE → DEGRADED → TRUNCATED 单向升级，
-    避免前端展示的降级提示反复抖动。调用方无需关心合并顺序，结果始终是更严重的那个。
+    避免前端展示的降级提示在后续操作成功时反复消失、出现。调用方无需关心合并顺序，
+    结果始终是更严重的那个，也允许从 COMPLETE 直接变为 TRUNCATED。
 
     Args:
-        current: 当前已持久化的归档状态。
-        incoming: 本次操作产生的新状态。
+        current: 当前已有的归档状态，可以来自 Runtime 内存或宿主持久化记录。
+        incoming: 本次发布、归档或提交操作得到的新状态。
 
     Returns:
-        两者中严重程度更高的状态值。
+        两者中严重程度更高的状态值；本函数不修改事件列表或持久化记录。
     """
 
     if _ARCHIVE_STATUS_PRIORITY[current] >= _ARCHIVE_STATUS_PRIORITY[incoming]:
@@ -31,39 +37,33 @@ def merge_archive_status(current: Integrity, incoming: Integrity) -> Integrity:
 
 
 def _encoded_event_bytes(event: Any) -> int:
-    """计算单个事件在归档 JSON 数组中占用的 UTF-8 紧凑编码字节数。
+    """计算单个事件的紧凑 JSON UTF-8 字节数，不含数组分隔符。
 
-    不包含数组分隔符（逗号、方括号），仅计算事件自身序列化后的字节长度。
-    用于 fit_archive_events 的增量字节累加，避免每次追加都重新编码整个数组。
-
-    Args:
-        event: 待计算的流式事件。
-
-    Returns:
-        该事件紧凑 JSON 编码后的 UTF-8 字节数。
+    通过 model_dump(mode="json") 获取事件表示；与数组开销分开计量，
+    使批量追加时只需编码每个事件一次。
     """
 
     return len(json.dumps(event.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def encoded_archive_bytes(events: list[Any], *, event_size: Callable[[Any], int] | None = None) -> int:
-    """计算事件列表序列化为 JSON 数组后的 UTF-8 紧凑编码总字节数。
+    """计算事件列表保存为紧凑 JSON 数组时的 UTF-8 字节数。
 
-    计算公式：2（首尾方括号） + 各元素编码字节之和 + (元素数 - 1)（逗号分隔符）。
-    这样无需真正执行 json.dumps(整个列表)，即可精确得到最终落库的字节数。
+    设计意图：把方括号、逗号和单事件字节数相加，避免为计量而反复编码整个数组。
+    只有单事件计量与宿主最终保存的 JSON 表示一致时，结果才等于实际持久化大小。
 
     Args:
-        events: 已有的事件列表。
-        event_size: 宿主实际持久记录的单事件字节计量；默认计量 model_dump。
+        events: 需要计量的完整事件列表。
+        event_size: 返回一条完整持久记录的字节数，不含数组分隔符。
+            默认使用 model_dump(mode="json") 的紧凑编码；若宿主另存隐藏字段，
+            应传入包含这些字段的计量函数。
 
     Returns:
-        该列表序列化为紧凑 JSON 数组后的 UTF-8 字节数（空列表返回 2，即 "[]"）。
+        2（方括号）+ 各事件字节之和 + 元素间逗号数；空数组返回 2。
     """
 
     if not events:
-        # 空数组仍占用 "[]" 两个字节。
         return 2
-    # 数组等于各元素编码之和，加上首尾方括号与元素间逗号，无需再整体编码一次。
     measure_event = event_size if event_size is not None else _encoded_event_bytes
     return 2 + sum(measure_event(event) for event in events) + (len(events) - 1)
 
@@ -75,24 +75,20 @@ def fit_archive_events(
     max_bytes: int,
     event_size: Callable[[Any], int] | None = None,
 ) -> tuple[list[Any], int, bool]:
-    """在容量限制内按顺序追加尽可能多的事件，返回合并结果。
+    """在归档容量内保留已有事件，再顺序追加能放下的新事件前缀。
 
-    设计意图：
-    - 字节数按增量累加（O(n) 对 incoming），而非每追加一条都重新编码整个数组。
-      单执行可能累积上万条事件，全量编码会让持有行锁的 checkpoint 退化成 O(n²)。
-    - 一旦某条事件放不下即停止，不跳跃保留后续事件，保证前端回放的时序连续性。
+    设计意图：先计量已有列表，再逐条累加新增字节，避免每次追加都重编码整个数组。
+    首条放不下就停止，保留连续的事件前缀，方便 UI 按原顺序回放；不会跳选更小的后续事件。
 
     Args:
-        existing: 数据库中已有的归档事件列表。
-        incoming: 本次待追加的新事件列表。
-        max_bytes: 归档 JSON 数组的 UTF-8 字节上限。
-        event_size: 与 encoded_archive_bytes 相同的宿主持久记录计量。
+        existing: 宿主已有的归档事件；返回结果保留这些事件，即使它们已经超过上限。
+        incoming: 本批待追加的事件，顺序与产生顺序一致。
+        max_bytes: 完整归档 JSON 数组的 UTF-8 字节上限，含方括号和逗号。
+        event_size: 单条持久记录的字节计量，约定与 encoded_archive_bytes 相同。
 
     Returns:
-        三元组 (merged, accepted_count, truncated):
-        - merged: 合并后的完整事件列表（existing + 已接收的 incoming 前缀）。
-        - accepted_count: 本次实际接收的 incoming 事件数量。
-        - truncated: 是否因容量不足而截断（True 表示有事件被丢弃）。
+        (merged, accepted_count, truncated)：新列表、接收的 incoming 条数、是否丢弃了 incoming。
+        merged 包含 existing 和接收的新事件前缀；输入列表不被修改，也不会自动去重。
     """
 
     if not incoming:

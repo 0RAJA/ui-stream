@@ -1,8 +1,8 @@
-"""A counter consumer using domain dataclasses, text frames and a latest-value snapshot.
+"""最小宿主示例：发送两个计数值，保存最新值，再提交求和结果。
 
-Run ``python -m examples.counter`` without Django, Redis or Pydantic. This
-in-process demonstration has no restart durability; a real host supplies its
-own transaction and execution ownership.
+make_counter 组装自定义事件、文本编码、内存发布器和快照存储，展示三个端口如何协作。
+运行 python -m examples.counter 查看帧和快照；无需 Django、Redis 或 Pydantic。
+数据仅保存在内存中，进程退出即丢失；持久化事务与任务调度应由实际宿主提供。
 """
 
 import threading
@@ -23,7 +23,10 @@ class CounterEvent:
 
 
 class CounterCodec:
-    """Independent domain vocabulary and non-JSON encoding; no default event inheritance."""
+    """把非负整数变成 tick 事件，把 DONE/FAILED 变成 done 事件。
+
+    使用简单 ASCII 文本计量，说明事件不必继承默认 JSON Event，也不必采用 SUCCESS 终态。
+    """
 
     def business(self, data: Any) -> CounterEvent:
         if type(data) is not int or data < 0:
@@ -51,7 +54,10 @@ class CounterSnapshot:
 
 
 class MemorySnapshotStore:
-    """Replace one immutable snapshot under a lock; only the bound execution may write."""
+    """用一次不可变对象替换更新最新值、终态和结果，展示 ArchiveStore 契约。
+
+    实例锁保护内存更新，绑定校验拒绝其他执行和已结束后的写入；这不是跨进程持久存储。
+    """
 
     def __init__(self, binding: Binding):
         self._binding = binding
@@ -88,7 +94,10 @@ class MemorySnapshotStore:
 
 
 class MemoryPublisher:
-    """An in-process text channel with transport receipts and terminal result visibility."""
+    """记录实时文本帧，并为每次发布返回递增回执。
+
+    遇到 done 时同时记录存储中可读的最终结果，用于验证提交先于结束通知。
+    """
 
     def __init__(self, codec: CounterCodec, store: MemorySnapshotStore):
         self._codec = codec
@@ -108,6 +117,12 @@ def counter_binding() -> Binding:
 
 
 def make_counter(*, policy: StreamPolicy = StreamPolicy(), after_close: AfterClose | None = None):
+    """组装独立内存 Counter，返回 (runtime, publisher, store)。
+
+    可传入 StreamPolicy 调整归档阈值，或用 after_close 观察结束摘要。
+    随后调用 runtime.send(非负整数)，最后 finish(status="DONE", completion=求和结果)。
+    """
+
     binding = counter_binding()
     codec = CounterCodec()
     store = MemorySnapshotStore(binding)
