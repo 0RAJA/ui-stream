@@ -2,7 +2,7 @@
 
 [English](releasing.en.md) · [文档导航](README.md)
 
-当前 Release workflow 仅验证产物；[PyPI 发布任务模板](pypi-publish-job.yml)尚未激活，未配置 PyPI secret/token。
+Release workflow 在验证产物后，通过 OIDC 和受保护的 `pypi` environment 发布到 PyPI；[发布任务参考](pypi-publish-job.yml)列出权限与步骤。
 
 ## 验证
 
@@ -23,9 +23,9 @@ python -m tools.verify_distribution --dist dist --check-tag v0.1.0a1
 
 本 alpha 使用 `v0.1.0a1` 与 prerelease 标记。必要 CI 必须覆盖待发布 commit；创建 GitHub Release 不等于 PyPI 上传成功。
 
-## 激活 Trusted Publisher
+## Trusted Publisher 配置
 
-配置持久信任前，由维护者明确批准并登录核实 PyPI 账号：
+发布授权绑定以下账号、仓库、工作流与环境。改变这组持久信任前，必须获得维护者明确批准并登录核实：
 
 | 项 | 值 |
 | --- | --- |
@@ -34,8 +34,8 @@ python -m tools.verify_distribution --dist dist --check-tag v0.1.0a1
 | Workflow / environment | `release.yml` / `pypi` |
 | OIDC | 仅 publisher job 授予 `id-token: write` |
 
-1. 配置并回读 GitHub `pypi` environment：仅允许 `v*` tag，required reviewer 为 `0RAJA`；不支持这些保护时停止。
-2. 添加 PyPI pending publisher，再将模板加入 `.github/workflows/release.yml`。pending publisher 不保留项目名，首次发布前需重新核查。
+1. 保留并回读 GitHub `pypi` environment 的保护：仅允许 `v*` tag，required reviewer 为 `0RAJA`；不支持这些保护时停止。
+2. 首次发布使用匹配的 PyPI pending publisher；创建项目后自动成为普通 publisher。pending publisher 不保留项目名，首次发布前需重新核查。
 3. 由维护者在 GitHub Review deployments 批准发布；自动化不得代批或绕过。不复制 API token。
 
 官方：[pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)、[OIDC 发布](https://docs.pypi.org/trusted-publishers/using-a-publisher/)。
