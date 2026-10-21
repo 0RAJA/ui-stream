@@ -8,3 +8,7 @@ dist/
 *.lock
 .env*
 .pypirc
+
+# 本地对照、图稿和临时上下文，不随库发布。
+debug/
+.archify/
