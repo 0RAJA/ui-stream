@@ -10,6 +10,7 @@ from typing import Any
 
 from demos.sqlite.constants import TOTAL_STEPS, EventKind, JobStatus
 from ui_stream.exceptions import InvalidEvent
+from ui_stream.sse import encode_sse_heartbeat
 from ui_stream.types import EncodingTarget
 
 
@@ -48,6 +49,13 @@ class DemoCodec:
             raise InvalidEvent("Invalid demo terminal status")
         return DemoEvent(kind=EventKind.FINISHED, status=status)
 
+    def reset(self, reason: str) -> DemoEvent:
+        """构造 Demo 自己的 reset 消息，保留 profile 的整数游标边界。"""
+
+        if not isinstance(reason, str):
+            raise InvalidEvent("Reset reason must be text")
+        return DemoEvent(kind=EventKind.RESET, message=reason)
+
     def encode(self, event: DemoEvent, target: EncodingTarget) -> bytes:
         return json_bytes(event.as_dict(include_cursor=target == EncodingTarget.ARCHIVE))
 
@@ -57,3 +65,20 @@ def sse_frame(kind: EventKind, data: Any, *, cursor: int | None = None) -> bytes
     name = EventKind(kind)
     identifier = "" if cursor is None else f"id: {int(cursor)}\n"
     return f"event: {name}\n{identifier}data: ".encode() + json_bytes(data) + b"\n\n"
+
+
+@dataclass(frozen=True, slots=True)
+class DemoSSEMessage:
+    """HTTP 层的 Demo 消息，保留自己的事件名、payload 与整数游标。"""
+
+    kind: EventKind
+    data: Any
+    cursor: int | None = None
+
+
+def encode_sse_message(message: DemoSSEMessage | None) -> bytes:
+    """适配通用同步响应体；None 只是本连接的心跳，不影响生产者。"""
+
+    if message is None:
+        return encode_sse_heartbeat()
+    return sse_frame(message.kind, message.data, cursor=message.cursor)

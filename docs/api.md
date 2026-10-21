@@ -2,7 +2,7 @@
 
 [English](api.en.md) · [文档导航](README.md)
 
-先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。alpha 阶段固定精确版本 `0.1.0a2`，升级前验证自己的适配器契约；签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
+先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。本页对应未发布的 `0.1.0a3` 源码候选；已发布 a2 的接入升级见[迁移说明](migration.md)，升级前验证适配器契约；签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
 
 ## 1. 创建 Runtime
 
@@ -11,7 +11,7 @@
 | 构造参数 | 传什么、用来做什么 |
 | --- | --- |
 | `binding` | `Binding(resource_id, task_id, execution_id)`，或有相同只读属性的对象；每次存储调用都携带它，宿主据此校验执行身份。 |
-| `codec` | 实现 `business`、`terminal`、`encode`，决定输入数据、事件结构、终态词汇和字节表示。 |
+| `codec` | 实现 `business`、`terminal`、`reset`、`encode`，决定输入数据、事件结构、终态词汇和字节表示。 |
 | `publisher` | 实现同步 `publish(event)`，返回后续归档用的事件，可附加真实消息 ID 回执。 |
 | `archive_store` | 实现 `checkpoint`、`touch_activity`、`commit`，保存进度与最终业务结果。 |
 | `policy` / `archive_status` | 固定 StreamPolicy 或返回它的无参工厂，以及此次执行已有的归档状态；按次求值规则见下文。 |
@@ -42,6 +42,12 @@
 | 默认配置下的 `StaleExecution`、其他未配置端口异常 | 向宿主传播，不能把旧执行当作暂时网络故障继续写。 |
 | 最终 `commit` 失败 | 始终传播，不关闭、不发实时终态、不通知观察者。事务与重试幂等由存储端实现。 |
 | 提交后的终态发布 / `after_close` 失败 | 捕获 `Exception`，不改变已提交结果；终态发布失败会使内存状态降级，但不回写持久记录。 |
+
+### 新执行通知旧流
+
+`announce_replacement(previous_publisher) -> bool` 在新 Runtime 上构造并校验 `codec.reset("execution_replaced")`，向旧执行的 publisher 发布。宿主必须先提交 execution 轮换和写入隔离，两端使用匹配的 codec 协议。已关闭的 Runtime 先抛关闭异常。
+
+只有 publish 阶段配置内的 `live_errors` 被捕获：记录新执行身份和异常类型、标记新 Runtime DEGRADED、返回 False。构造/编码错误及其他异常直接传播；True 表示 publish 正常返回，不证明读者收到。此方法不调用策略工厂，不影响事件预算/pending/归档，不关闭或重试。失败后的重试决策、读者状态复核与数据库事务由宿主负责。
 
 ## 3. 配置容量和归档批量
 
@@ -112,7 +118,7 @@ runtime.finish(status="DONE", completion=13)
 
 ## 5. 选择事件与读取协议
 
-`ui_stream`、`types`、`exceptions`、`archive` 可用标准库核心。默认 `codec`、`reader`、`sse` 需要 `[json]`；实际 `RedisLiveStore` 还需要 `[redis]`。可选 profile 就是一组现成事件/适配器，核心不强制使用它们。
+`ui_stream`、`types`、`exceptions`、`archive`、`sse` 可用标准库核心。默认 `codec`、`reader` 需要 `[json]`；实际 `RedisLiveStore` 还需要 `[redis]`。可选 profile 就是一组现成事件/适配器，核心不强制使用它们。
 
 默认 `Event(event=None, data=...)` 表示业务消息，`ControlEvent.STREAM_END` 表示结束，`STREAM_RESET` 表示宿主要求重新选择执行。`stream_id` 保存 Redis 真正生成的消息 ID；宿主合成的控制提示通常留空，避免伪造续传位置。字段赋值被冻结，但 `data` 内部对象没有深度冻结，接受后不能继续修改。默认 JSON 编码拒绝 NaN/Infinity。
 
@@ -124,15 +130,15 @@ runtime.finish(status="DONE", completion=13)
 
 ```python
 from ui_stream.reader import iter_live, normalize_cursor
-from ui_stream.sse import encode_sse_event, encode_sse_heartbeat
+from ui_stream.sse import SSEBody
 
 
 def sse_frames(store, key, last_event_id, state_check=None):
     cursor = normalize_cursor(last_event_id)
-    for event in iter_live(
+    events = iter_live(
         redis_store=store, redis_key=key, cursor=cursor, state_check=state_check
-    ):
-        yield encode_sse_heartbeat() if event is None else encode_sse_event(event)
+    )
+    return SSEBody(events)
 ```
 
 `normalize_cursor` 把空/假值转为 `0-0`，否则要求两段 ASCII 十进制 uint64，合法前导零原样保留；不验证事件存在性或权限。`iter_live` 只产出 Event 或 None，None 由宿主转成 SSE 注释心跳；心跳不推进游标或刷新业务空闲时间。示例沿用 `block_ms=15000`（单次最多等待 15 秒）和 `idle_timeout=300`（业务空闲期限 5 分钟）；默认无状态提示时，持续无业务事件达到期限也会结束迭代。长任务可按需调整这两个参数，见 [reader.py](../src/ui_stream/reader.py)。
@@ -141,11 +147,21 @@ def sse_frames(store, key, last_event_id, state_check=None):
 
 `RedisLiveStore` 每次追加在 Lua 内执行 XADD 与滑动 TTL 刷新，返回附有真实 ID 的新事件；没有自动重发/去重。读取时建议 `decode_responses=False`：坏 payload 可逐条跳过，批次扫描游标仍前进。若客户端预解码在返回任何 ID 前就失败，则变成 LiveUnavailable。读取遇到配置的实时异常时迭代结束，**不会合成完成事件**；快照重取和重连由宿主决定。`block_ms<=0` 在默认适配器中表示不阻塞，不是 Redis `BLOCK 0` 的无限等待。
 
+### 同步 SSEBody 的资源边界
+
+`SSEBody(events, *, encoder=...)` 是惰性同步 `Iterator[bytes]`，要求传入已取得的 Iterator。默认编码 Event/None；自定义编码器处理每个元素并返回 bytes，可映射宿主异常。body.close 在首次 next 前、正常耗尽、读取或编码错误时向源 close 透传且最多一次。直接 close 失败传播；已有读取/编码错误期间的普通清理失败只记录类型，不替换原错误。编码器或自然耗尽清理的 StopIteration 转为带 cause 的 RuntimeError，避免消费者误当 EOF；显式 close 保留原异常。
+
+HTTP 层应在退出时关闭 body。它只拥有传入的 iterator，不关闭外层 Iterable、共享客户端或生产任务。未启动生成器的 finally 不保证执行，阻塞 next 不能被 close 中断；不支持并发调用和 async iterator。可运行自定义编码示例见[迁移说明](migration.md)。
+
 ### 宿主保存有界 JSON 事件列表
 
 `encoded_archive_bytes(events, event_size=...)` 计算完整紧凑 JSON 数组字节，包含方括号和逗号；默认用 `model_dump(mode="json")` 计量单条记录。`fit_archive_events(existing=..., incoming=..., max_bytes=..., event_size=...)` 返回 **(新列表、接收的新事件数、是否丢弃了新事件)**，保留已有数据并只接收能放下的连续前缀，不修改输入列表或自动去重。
 
 若持久化记录包含公开序列化排除的内部字段，`event_size` 应计入这些字段；只有它与实际紧凑 JSON 编码一致，结果才是实际存储大小。这里仅提供计量和裁剪，查询、事务、权限与归档回放仍在宿主实现。
+
+需要重试去重时使用 `append_archive_events(existing, incoming, *, max_bytes, identity, event_size=None) -> ArchiveAppendResult`。它先按宿主提供的 Hashable ID 去重，再调用 fit；只有 None 表示无身份，不按正文去重或生成 ID。已有事件含重复/超大记录也原样保留；incoming 中同 ID 首条优先。回调异常传播。
+
+结果 `events` 是新列表；`appended_count`、`duplicate_count`、容量 `dropped_count` 之和等于本批 incoming 长度，`truncated` 为 dropped_count > 0。先去重再裁剪，首条被拒绝后不接收后面更小候选。宿主保证身份不可变、输入接收后不被修改，并在自己的事务内保存结果。完整示例和边界见[迁移说明](migration.md)。
 
 ## 6. 从内嵌源码迁移
 

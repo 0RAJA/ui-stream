@@ -15,6 +15,41 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
+  quality_security:
+    name: Quality and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install pinned check tools
+        run: python -m pip install 'pre-commit==4.2.0' 'bandit==1.9.4' 'pip-audit==2.10.1'
+      - name: Check formatting and lint
+        run: python -m pre_commit run --all-files --show-diff-on-failure
+      - name: Scan runtime Python code
+        run: python -m bandit --recursive src/ui_stream
+      - name: Resolve public runtime dependencies
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import tomllib
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          requirements = set(project["dependencies"])
+          for extra in ("json", "redis"):
+              requirements.update(project["optional-dependencies"][extra])
+          target = Path(os.environ["RUNNER_TEMP"]) / "runtime-requirements.txt"
+          target.write_text("\n".join(sorted(requirements)) + "\n")
+          PY
+          python -m pip install --only-binary=:all: --target "$RUNNER_TEMP/runtime-dependencies" -r "$RUNNER_TEMP/runtime-requirements.txt"
+      - name: Audit resolved runtime dependencies
+        run: python -m pip_audit --strict --vulnerability-service pypi --progress-spinner off --path "$RUNNER_TEMP/runtime-dependencies"
+
   tests:
     name: Python ${{ matrix.python }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -50,7 +85,7 @@ jobs:
 
   distributions:
     name: Wheel, sdist, README and release scan
-    needs: tests
+    needs: [tests, quality_security]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

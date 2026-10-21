@@ -56,6 +56,8 @@ class DistributionBoundaryTest(unittest.TestCase):
             "ui_stream/" + name
             for name in (
                 "__init__.py",
+                "_cursor.py",
+                "_json.py",
                 "archive.py",
                 "codec.py",
                 "exceptions.py",

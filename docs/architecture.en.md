@@ -25,7 +25,7 @@ A “port” is an implementation object with agreed methods. Your classes can s
 
 | Object | Implement | How Runtime uses it |
 | --- | --- | --- |
-| `EventCodec` | `business(data)`, `terminal(status)`, `encode(event, target)` | Construct progress/terminal events, validate and measure bytes, without backend I/O. |
+| `EventCodec` | `business(data)`, `terminal(status)`, `reset(reason)`, `encode(event, target)` | Construct progress/terminal/reset events, validate and measure bytes, without backend I/O. |
 | `LivePublisher` | `publish(event)` | Publish synchronously; return a new receipt-bearing event if the backend generates a message ID. |
 | `ArchiveStore` | `checkpoint(...)`, `touch_activity(...)`, `commit(...)` | Save progress batches, refresh activity, and atomically save the tail, terminal event, and result at completion. |
 
@@ -68,6 +68,10 @@ sequenceDiagram
 ```
 
 </details>
+
+## Replacing an execution
+
+The host commits execution rotation and fences the previous writer before calling the new Runtime's `announce_replacement(previous_publisher)`. The new codec constructs reset, while the previous publisher chooses the old channel. Configured publication failures return False and degrade the new Runtime; construction/encoding errors propagate. The host owns transactions, retry decisions, and reader state checks when a notification is missed. See [API](api.en.md) and [migration](migration.en.md).
 
 ## UI reads and recovery
 

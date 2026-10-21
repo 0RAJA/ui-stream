@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.en.md)
 
+## 0.1.0a3 — 未发布
+
+- EventCodec 统一增加 `reset(reason)`；新 Runtime 可通知旧 publisher，传输失败返回 False 并降级，事务轮换仍由宿主负责。
+- 按宿主身份去重后复用容量裁剪，分别报告追加、重复和容量丢弃；不生成身份或按正文去重。
+- 同步 SSEBody 负责逐项编码与 iterator 关闭，支持注入 encoder；SQLite Demo 使用自定义协议接入，SSE 模块不再依赖 Pydantic。
+- 增加质量、安全和依赖审计门禁及真实状态徽章；保留来源许可证并完善双语 API/迁移说明。
+
 ## 0.1.0a2 — 动态策略与接入文档
 
 - `policy` 支持无参 `StreamPolicy` 工厂；每次 `send` 在锁内取一次快照，配置从下次发送生效。

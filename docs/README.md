@@ -12,6 +12,7 @@
 | 看浏览器、持久化与恢复交互 | [SQLite Demo](../demos/sqlite/README.md) |
 | 看性能数据与相近方案 | [性能图表与验收](performance.md) / [方案选型](comparison.md) |
 | 修改代码或报告安全问题 | [贡献](../CONTRIBUTING.md) / [安全](../SECURITY.md) |
+| 从 a2 升级到 a3 | [迁移说明](migration.md)：codec、轮换通知、归档追加与 SSE 生命周期 |
 | 构建和发布 | [发布流程](releasing.md) |
 | 查来源与版本变化 | [许可证](license.md) / [来源清单](../PROVENANCE.md) / [变更](../CHANGELOG.md) |
 

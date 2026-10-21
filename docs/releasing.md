@@ -18,10 +18,10 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
-python -m tools.verify_distribution --dist dist --check-tag v0.1.0a2
+python -m tools.verify_distribution --dist dist --check-tag v0.1.0a3
 ```
 
-本 alpha 使用 `v0.1.0a2` 与 prerelease 标记。必要 CI 必须覆盖待发布 commit；创建 GitHub Release 不等于 PyPI 上传成功。
+本 alpha 使用 `v0.1.0a3` 与 prerelease 标记。必要 CI 必须覆盖待发布 commit；创建 GitHub Release 不等于 PyPI 上传成功。
 
 ## Trusted Publisher 配置
 
@@ -42,6 +42,6 @@ python -m tools.verify_distribution --dist dist --check-tag v0.1.0a2
 
 ## 分发边界
 
-wheel 只含 `ui_stream` 的九个运行时模块、`py.typed` 和必要元数据/许可证；最小 sdist 保留重建核心的输入与 PyPI README。Demo、示例、测试、benchmark、CI 和工具留在仓库，extras 只增加依赖。
+wheel 只含 `ui_stream` 的运行时模块及私有标准库辅助模块、`py.typed` 和必要元数据/许可证；最小 sdist 保留重建核心的输入与 PyPI README。Demo、示例、测试、benchmark、CI 和工具留在仓库，extras 只增加依赖。
 
 `repository-allowlist.txt` 检查整个仓库，`release-allowlist.txt` 与 `MANIFEST.in` 限定 sdist。门禁在仓库外安装实际 wheel，加载仓库测试与 Demo、核对核心导入位置，再从 sdist 重建并逐项比较 wheel 内容。使用干净 clone/export，见[贡献指南](../CONTRIBUTING.md)。

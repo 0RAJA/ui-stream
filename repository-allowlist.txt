@@ -55,6 +55,8 @@ docs/diagrams/completion.png
 docs/diagrams/completion.svg
 docs/license.en.md
 docs/license.md
+docs/migration.en.md
+docs/migration.md
 docs/performance-figures/core-persistence.png
 docs/performance-figures/core-persistence.svg
 docs/performance-figures/http-latency.png
@@ -73,6 +75,8 @@ pyproject.toml
 release-allowlist.txt
 repository-allowlist.txt
 src/ui_stream/__init__.py
+src/ui_stream/_cursor.py
+src/ui_stream/_json.py
 src/ui_stream/archive.py
 src/ui_stream/codec.py
 src/ui_stream/exceptions.py
@@ -84,6 +88,7 @@ src/ui_stream/sse.py
 src/ui_stream/types.py
 tests/__init__.py
 tests/demo_client_contract.cjs
+tests/test_archive_append.py
 tests/test_archive_encoding.py
 tests/test_benchmarks.py
 tests/test_contract.py
@@ -93,7 +98,9 @@ tests/test_docs.py
 tests/test_publishing.py
 tests/test_reader_state.py
 tests/test_release_checks.py
+tests/test_replacement.py
 tests/test_runtime_boundaries.py
+tests/test_sse_body.py
 tools/__init__.py
 tools/build_local.py
 tools/check_docs.py

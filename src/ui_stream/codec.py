@@ -9,23 +9,14 @@ LIVE 表示省略 stream_id，ARCHIVE 表示保留回执；编码过程不执行
 
 from __future__ import annotations
 
-import json
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from ui_stream._json import serialize_data
 from ui_stream.exceptions import InvalidEvent
 from ui_stream.types import EncodingTarget
-
-
-def serialize_data(data: Any) -> bytes:
-    """编码标准 JSON 为紧凑 UTF-8；不可编码值或非有限浮点数抛 InvalidEvent。"""
-
-    try:
-        return json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-    except (TypeError, ValueError):
-        raise InvalidEvent("Stream data must be standard JSON") from None
 
 
 def serialize_event(event: Event, *, include_stream_id: bool = True) -> bytes:
@@ -67,7 +58,7 @@ class JsonEventCodec:
 
     business 接受可编码为标准 JSON 的数据，严格校验在 encode 时完成；terminal 接受
     SUCCESS/FAILED。event_factory 和 serializer 可替换，但构造、计量与实际端口应保持一致。
-    执行切换使用的 stream_reset 由宿主另行构造。
+    reset 按宿主原因构造 stream_reset；事件构造不分配实时或归档身份。
     """
 
     def __init__(self, *, event_factory=Event, serializer=serialize_event):
@@ -87,6 +78,13 @@ class JsonEventCodec:
         if status not in ("SUCCESS", "FAILED"):
             raise InvalidEvent("Unsupported terminal status")
         return self._event_factory(event=ControlEvent.STREAM_END, data={"status": status})
+
+    def reset(self, reason: str) -> Event:
+        """构造无游标的执行切换提示；原因由宿主解释，不分配可续传身份。"""
+
+        if not isinstance(reason, str):
+            raise InvalidEvent("Reset reason must be text")
+        return self._event_factory(event=ControlEvent.STREAM_RESET, data={"reason": reason})
 
     def encode(self, event: Event, target: EncodingTarget) -> bytes:
         """按计量目标决定是否包含 stream_id，返回字节而不执行 I/O。"""

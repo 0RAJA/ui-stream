@@ -147,7 +147,7 @@ AfterClose = Callable[[Summary], None]
 class EventCodec(Protocol[EventT]):
     """把宿主业务输入转换为事件，并提供实时与归档两种编码。
 
-    Runtime 调用 business(data) 处理进度，调用 terminal(status) 构造结束事件，再用 encode
+    Runtime 用 business/terminal/reset 构造进度、终态或切换提示，再用 encode
     校验和计量。实现这些方法即可替换默认 JSON 模型，不必继承 Event。
     构造与编码都不执行后端 I/O，也不修改已接受的事件；编码错误直接交给调用方处理。
     """
@@ -162,10 +162,15 @@ class EventCodec(Protocol[EventT]):
 
         ...
 
+    def reset(self, reason: str) -> EventT:
+        """按宿主原因构造当前 profile 的切换事件；不生成消息身份或进行 I/O。"""
+
+        ...
+
     def encode(self, event: EventT, target: EncodingTarget) -> bytes:
         """返回事件在目标通道中的编码字节，供 Runtime 校验和计量。
 
-        event 是 business/terminal 或 publisher 返回的事件；target 指定 LIVE 或 ARCHIVE。
+        event 是 business/terminal/reset 或 publisher 返回的事件；target 指定 LIVE 或 ARCHIVE。
         编码应与对应端口的实际表示一致，包含该目标需要的回执等字段，不发送或存储事件。
         """
 

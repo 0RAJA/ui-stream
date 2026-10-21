@@ -6,6 +6,8 @@ README.pypi.md
 pyproject.toml
 release-allowlist.txt
 src/ui_stream/__init__.py
+src/ui_stream/_cursor.py
+src/ui_stream/_json.py
 src/ui_stream/archive.py
 src/ui_stream/codec.py
 src/ui_stream/exceptions.py

@@ -16,6 +16,10 @@ python -m tools.check_docs
 
 If pre-commit is available, run `pre-commit run --all-files`. Keep core dependencies empty, imports at module scope, and adapters outside core. Add behavior regressions for commit ordering, stale-writer isolation, capacity, and exceptions.
 
+The CI quality/security job reuses every repository pre-commit hook, scans `src/ui_stream` with Bandit, and queries known vulnerabilities in public runtime dependencies with pip-audit. Core, `json`, and `redis` requirements come from metadata and resolve into an isolated directory, including transitive dependencies while excluding scanner tools and the unreleased ui-stream package itself. Distribution checks require this job to succeed.
+
+Formatting and code scans run locally on the runner without source uploads; dependency audits query package names and versions through PyPI's public vulnerability API. CI installs pinned tool versions. Local checks use tools already available; these instructions do not install them automatically. Vulnerabilities or collection/query failures fail the gate without automatic dependency fixes or ignored advisories. README badges show remote main/published-package state, not validation of a local candidate.
+
 ## Documentation and distributions
 
 Chinese is primary; link English counterparts and align commands, APIs, versions, and behavior. README introduces purpose/startup, Architecture explains concepts/integration, and API owns parameter/failure semantics. Avoid repeating the entire contract across pages. Comments explain purpose and rationale first, retaining useful input/output detail rather than targeting brevity.

@@ -29,6 +29,7 @@ from ui_stream.types import (
 )
 
 logger = logging.getLogger(__name__)
+_REPLACEMENT_REASON = "execution_replaced"
 
 
 class StreamRuntime(Generic[EventT]):
@@ -171,6 +172,30 @@ class StreamRuntime(Generic[EventT]):
             archive_payload_size = len(self._codec.encode(ui_event, EncodingTarget.ARCHIVE))
             self._buffer(ui_event, payload_size=archive_payload_size, policy=policy)
             return ui_event
+
+    def announce_replacement(self, previous_publisher: LivePublisher[EventT]) -> bool:
+        """向旧实时流发送切换提示，传输失败只降级这个新 Runtime。
+
+        宿主先在事务中完成新代际绑定及旧写者隔离，再调用此方法；通知不执行轮换或重试。
+        构造与 LIVE 编码错误直接传播；只有 publish 的 live_errors 返回 False 并记降级。
+        True 仅表示发布端正常返回，不保证旧读者已收到。此通知不归档、不计业务预算，
+        不读取 policy 或更换本实例通道；失败日志使用新绑定，不记录正文或异常详情。
+        """
+
+        with self._lock:
+            self._require_open()
+            event = self._codec.reset(_REPLACEMENT_REASON)
+            self._codec.encode(event, EncodingTarget.LIVE)
+            try:
+                previous_publisher.publish(event)
+            except self._live_errors as error:
+                self._degrade(
+                    "UI stream replacement announcement unavailable",
+                    status=Integrity.DEGRADED,
+                    extra={"operation": "announce_replacement", "error_type": type(error).__name__},
+                )
+                return False
+            return True
 
     def finish_retry(self) -> None:
         """在宿主准备重试任务前，尝试保存当前缓冲并关闭本 Runtime。

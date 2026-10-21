@@ -15,8 +15,9 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from demos.sqlite.constants import MAX_REQUEST_BYTES, EventKind, JobStatus, Scenario
-from demos.sqlite.events import json_bytes, sse_frame
+from demos.sqlite.events import DemoSSEMessage, encode_sse_message, json_bytes
 from demos.sqlite.service import DemoBusy, DemoService
+from ui_stream.sse import SSEBody
 
 ASSETS = {
     "/": ("index.html", "text/html"),
@@ -137,37 +138,41 @@ class DemoHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
+        body = SSEBody(self._stream_events(job, cursor), encoder=encode_sse_message)
         try:
-            if job["status"] != JobStatus.RUNNING:
-                self.wfile.write(sse_frame(EventKind.STATE, job))
+            for frame in body:
+                self.wfile.write(frame)
                 self.wfile.flush()
-                return
-            channel = self.server.service.channel(job["id"])
-            if channel is None:
-                self.wfile.write(sse_frame(EventKind.SYNC, {"reason": "producer_unavailable"}))
-                self.wfile.flush()
-                return
-            while True:
-                batch = channel.read(cursor)
-                if batch.gap:
-                    self.wfile.write(sse_frame(EventKind.RESET, {"reason": "live_tail_gap"}))
-                    self.wfile.flush()
-                    return
-                for event in batch.events:
-                    self.wfile.write(sse_frame(EventKind(event.kind), event.as_dict(), cursor=event.cursor))
-                    self.wfile.flush()
-                    cursor = event.cursor
-                    if event.kind == EventKind.FINISHED:
-                        return
-                if batch.closed:
-                    self.wfile.write(sse_frame(EventKind.SYNC, {"reason": "producer_closed"}))
-                    self.wfile.flush()
-                    return
-                if not batch.events:
-                    self.wfile.write(b": heartbeat\n\n")
-                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             return
+        finally:
+            body.close()
+
+    def _stream_events(self, job: dict, cursor: int):
+        """读取这个连接的尾流；连接关闭不关闭共享 channel 或后台任务。"""
+
+        if job["status"] != JobStatus.RUNNING:
+            yield DemoSSEMessage(EventKind.STATE, job)
+            return
+        channel = self.server.service.channel(job["id"])
+        if channel is None:
+            yield DemoSSEMessage(EventKind.SYNC, {"reason": "producer_unavailable"})
+            return
+        while True:
+            batch = channel.read(cursor)
+            if batch.gap:
+                yield DemoSSEMessage(EventKind.RESET, {"reason": "live_tail_gap"})
+                return
+            for event in batch.events:
+                yield DemoSSEMessage(EventKind(event.kind), event.as_dict(), event.cursor)
+                cursor = event.cursor
+                if event.kind == EventKind.FINISHED:
+                    return
+            if batch.closed:
+                yield DemoSSEMessage(EventKind.SYNC, {"reason": "producer_closed"})
+                return
+            if not batch.events:
+                yield None
 
 
 def make_server(service: DemoService, *, port: int = 8765) -> DemoHTTPServer:

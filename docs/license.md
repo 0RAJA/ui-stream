@@ -2,8 +2,16 @@
 
 [English](license.en.md) · [来源清单](../PROVENANCE.md)
 
-本项目采用 MIT。请以保留的 [完整许可证](../LICENSE)、[上游原声明](../LICENSE.upstream) 与 [NOTICE](../NOTICE) 为法律原文；中文说明不替代这些文本。
-MIT 要求在副本或实质部分中保留版权和许可声明，并按原文提供无担保条款。原 `THL A29 Limited` 版权没有删除或改成个人版权。
-维护者身份与上游版权是不同事项：当前个人维护者为 `raja <rajawwang@foxmail.com>`，GitHub 登录为 `0RAJA`。
+本项目的许可证是 **MIT**，`pyproject.toml` 及衍生源码的 SPDX 声明与此一致。三份保留材料承担不同职责，并不表示采用三种许可证：
+
+| 文件 | 含义 |
+| --- | --- |
+| [LICENSE](../LICENSE) | ui-stream 的完整 MIT 许可条款，保留原版权人。README 的主许可证链接指向这里。 |
+| [LICENSE.upstream](../LICENSE.upstream) | 原样保留的上游项目 MIT 声明。GitHub 的另一个 “License” 标签展示此文件，因此仍能看到上游项目名称。 |
+| [NOTICE](../NOTICE) | 说明抽取、衍生关系和归属，不是另一份不同授权。 |
+
+上游项目名出现在历史声明中是来源证据，不是 ui-stream 当前名称；[来源清单](../PROVENANCE.md) 列明保守视为衍生的运行时模块及从中拆出的私有辅助模块。相关文件自组件初始提交起保留，不能只因仓库由个人维护就推断代码完全自有。
+
+MIT 允许使用、修改和分发，但要求副本或实质部分保留版权与许可声明，并包含原文的无担保条款。它不把版权转让给仓库维护者。原 `THL A29 Limited` 版权与声明继续保留；若要为独立新增部分补充归属，应先确认实际权利人，再追加准确说明，不能替换已有权利人。这里解释当前文件与来源证据，不重新分配权利。
 
 参考：[MIT 官方文本](https://opensource.org/license/mit/)。

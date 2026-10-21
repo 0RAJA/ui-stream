@@ -18,10 +18,10 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
-python -m tools.verify_distribution --dist dist --check-tag v0.1.0a2
+python -m tools.verify_distribution --dist dist --check-tag v0.1.0a3
 ```
 
-Use `v0.1.0a2` and the prerelease flag for this alpha. Required CI must cover the release commit; creating a GitHub Release does not confirm a PyPI upload.
+Use `v0.1.0a3` and the prerelease flag for this alpha. Required CI must cover the release commit; creating a GitHub Release does not confirm a PyPI upload.
 
 ## Trusted Publisher configuration
 
@@ -42,6 +42,6 @@ Official: [pending publishers](https://docs.pypi.org/trusted-publishers/creating
 
 ## Distribution boundary
 
-The wheel contains nine `ui_stream` runtime modules, `py.typed`, and required metadata/licenses. The minimal sdist retains core rebuild inputs and the PyPI README. Demos, examples, tests, benchmarks, CI, and tools stay in the repository; extras only add dependencies.
+The wheel contains `ui_stream` runtime modules and their private standard-library helpers, `py.typed`, and required metadata/licenses. The minimal sdist retains core rebuild inputs and the PyPI README. Demos, examples, tests, benchmarks, CI, and tools stay in the repository; extras only add dependencies.
 
 `repository-allowlist.txt` checks the repository; `release-allowlist.txt` and `MANIFEST.in` bound the sdist. The gate installs the actual wheel outside the repository, loads repository tests and Demo hosts, checks core import locations, then rebuilds from sdist and compares every wheel member. Use a clean clone/export; see [Contributing](../CONTRIBUTING.en.md).

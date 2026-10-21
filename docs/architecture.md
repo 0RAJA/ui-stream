@@ -25,7 +25,7 @@
 
 | 对象 | 需要实现什么 | Runtime 怎样使用它 |
 | --- | --- | --- |
-| `EventCodec` | `business(data)`、`terminal(status)`、`encode(event, target)` | 构造进度/终态事件，校验并计算字节数，不做后端 I/O。 |
+| `EventCodec` | `business(data)`、`terminal(status)`、`reset(reason)`、`encode(event, target)` | 构造进度/终态事件，校验并计算字节数，不做后端 I/O。 |
 | `LivePublisher` | `publish(event)` | 同步发布事件；若后端生成消息 ID，可返回带回执的新事件。 |
 | `ArchiveStore` | `checkpoint(...)`、`touch_activity(...)`、`commit(...)` | 保存批量进度、刷新活动时间，并在结束时原子保存归档尾部、终态和结果。 |
 
@@ -68,6 +68,12 @@ sequenceDiagram
 ```
 
 </details>
+
+## 执行轮换与旧流提示
+
+宿主在事务中提交新 execution 并隔离旧写者后，用新 Runtime 调用 `announce_replacement(previous_publisher)`。codec 构造当前 profile 的 reset，组件只向旧通道尝试发布；传输故障返回 False 并降级新 Runtime，不撤回绑定、不重试或改写旧存储。广播只是通知优化，读端 `state_check` 与存储 fencing 仍负责识别失效执行。
+
+自定义 codec 与默认 codec 使用统一四方法协议，reset 必须表达自己的关闭/切换信号。Counter 和 Demo 各自保留业务事件词汇；组件不通过探测旧协议来选择另一套路径。完整升级步骤见[迁移说明](migration.md)。
 
 ## UI 怎样读取和恢复
 

@@ -8,10 +8,11 @@ event_size 可对齐包含宿主隐藏字段的真实编码；已有列表不会
 """
 
 import json
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Hashable, Sequence
+from dataclasses import dataclass
+from typing import Any, Generic
 
-from ui_stream.types import Integrity
+from ui_stream.types import EventT, Integrity
 
 _ARCHIVE_STATUS_PRIORITY = {Integrity.COMPLETE: 0, Integrity.DEGRADED: 1, Integrity.TRUNCATED: 2}
 
@@ -108,3 +109,58 @@ def fit_archive_events(
         accepted_count += 1
         current_bytes = candidate_bytes
     return accepted, accepted_count, False
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveAppendResult(Generic[EventT]):
+    """保存追加后的新列表及本批处理计数，不改变输入或推断持久化成功。
+
+    duplicate_count 包含已存身份与批内重复；dropped_count 仅统计去重后容量放不下的事件。
+    events 的列表和事件自身仍须由宿主按不可变输入约定使用。
+    """
+
+    events: list[EventT]
+    appended_count: int
+    duplicate_count: int
+    dropped_count: int
+
+    @property
+    def truncated(self) -> bool:
+        """只有容量丢弃才表示本批发生新损失，正常去重不触发截断。"""
+
+        return self.dropped_count > 0
+
+
+def append_archive_events(
+    existing: Sequence[EventT],
+    incoming: Sequence[EventT],
+    *,
+    max_bytes: int,
+    identity: Callable[[EventT], Hashable | None],
+    event_size: Callable[[EventT], int] | None = None,
+) -> ArchiveAppendResult[EventT]:
+    """按宿主身份稳定去重，再追加容量允许的新候选前缀。
+
+    existing 原样保留，含其中已有的重复或超限数据；同身份的 incoming 只保留首条。
+    只有 None 表示没有身份，这些事件不做正文去重。身份及计量错误直接传播。
+    宿主应在存储事务中使用，并保证身份稳定、作用域正确；本函数不生成 ID 或提供 fencing。
+    批内重复先于容量处理计数，因此 incoming 条数等于新增、重复及容量丢弃三者之和。
+    """
+
+    if not incoming:
+        return ArchiveAppendResult(list(existing), 0, 0, 0)
+    seen = {key for event in existing if (key := identity(event)) is not None}
+    candidates: list[EventT] = []
+    duplicate_count = 0
+    for event in incoming:
+        key = identity(event)
+        if key is not None:
+            if key in seen:
+                duplicate_count += 1
+                continue
+            seen.add(key)
+        candidates.append(event)
+    events, appended_count, _ = fit_archive_events(
+        existing=list(existing), incoming=candidates, max_bytes=max_bytes, event_size=event_size
+    )
+    return ArchiveAppendResult(events, appended_count, duplicate_count, len(candidates) - appended_count)

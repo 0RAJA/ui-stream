@@ -1,8 +1,14 @@
 # ui-stream
 
+[![CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ui-stream?include_prereleases=true)](https://pypi.org/project/ui-stream/)
+[![License: MIT](https://img.shields.io/github/license/0RAJA/ui-stream)](https://github.com/0RAJA/ui-stream/blob/main/LICENSE)
+
 [English](README.en.md) · [文档](docs/README.md) · [CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml)
 
 **把后台任务的进度发给 UI，分批保存进度快照，并在发送结束通知前提交最终结果。**
+
+当前源码为 **0.1.0a3 未发布候选**，增加统一 reset 协议、旧流通知、身份归档追加与同步 SSEBody；接入变化见[迁移说明](docs/migration.md)。下方 PyPI 安装命令仍固定已发布的 a2。
 
 ui-stream 适合已经有后台任务和业务存储的 Python 应用。它负责实时发布、归档缓冲和完成顺序；使用它的应用（下文称“宿主”）提供任务调度、权限与真正的存储事务。核心同步、无第三方依赖。
 
@@ -53,13 +59,12 @@ Counter 用内存演示接口，进程退出即丢失数据。它自定义了 `D
 
 | 安装范围 | 用途与依赖 |
 | --- | --- |
-| 核心 wheel | 标准库；Runtime、端口和归档辅助函数 |
+| 核心 wheel | 标准库；Runtime、端口、归档辅助函数和同步 SSE 响应体 |
 | 仓库 Counter / SQLite Demo | 标准库 + 已安装核心 |
-| `[json]` | 默认 JSON 事件、Redis 游标读取协议和 SSE 帧；Pydantic ≥2.10,<3 |
+| `[json]` | 默认 JSON 事件/codec 与 Redis 游标 reader；Pydantic ≥2.10,<3 |
 | `[redis]` | 另含 Redis 实时存储适配器；Pydantic ≥2.10,<3，redis-py ≥3.5.3 |
 
 [Demo](demos/sqlite/README.md) · [性能图表](docs/performance.md) · [方案选型](docs/comparison.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [发布](docs/releasing.md)
 
-CI 的源码矩阵覆盖 Python 3.11–3.14 / Linux、macOS；wheel、sdist 与 README 验证在 Linux 执行。
-维护者：`raja <rajawwang@foxmail.com>`（GitHub [0RAJA](https://github.com/0RAJA)）。
-[MIT 及来源说明](docs/license.md)；原版权声明保持不变。
+CI 覆盖 Python 3.11–3.14 / Linux、macOS，以及质量、安全与分发检查；[检查范围](CONTRIBUTING.md#开发验证)。徽章反映远端 main 和已发布包的状态。
+[MIT 完整许可证](LICENSE) · [来源与上游声明说明](docs/license.md)；原版权声明保持不变。

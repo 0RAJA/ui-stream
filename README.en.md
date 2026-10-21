@@ -1,8 +1,14 @@
 # ui-stream
 
+[![CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ui-stream?include_prereleases=true)](https://pypi.org/project/ui-stream/)
+[![License: MIT](https://img.shields.io/github/license/0RAJA/ui-stream)](https://github.com/0RAJA/ui-stream/blob/main/LICENSE)
+
 [简体中文](README.md) · [Documentation](docs/README.en.md) · [CI](https://github.com/0RAJA/ui-stream/actions/workflows/ci.yml)
 
 **Send background-task progress to a UI, save progress snapshots in batches, and commit the final result before announcing completion.**
+
+This source is an **unreleased 0.1.0a3 candidate**, adding a unified reset protocol, previous-stream notification, identity-aware archive appends, and synchronous SSEBody. See the [migration guide](docs/migration.en.md). The PyPI command below still pins the published a2.
 
 ui-stream fits Python applications that already own background tasks and business storage. It coordinates live publication, archive buffering, and completion order. The application using it (the “host”) supplies scheduling, permissions, and real storage transactions. The synchronous core has no third-party dependencies.
 
@@ -53,13 +59,12 @@ After creating one execution, assemble `StreamRuntime` with three implementation
 
 | Installation | Purpose and dependencies |
 | --- | --- |
-| Core wheel | Standard library; Runtime, ports, and archive helpers |
+| Core wheel | Standard library; Runtime, ports, archive helpers, and synchronous SSE bodies |
 | Repository Counter / SQLite Demo | Standard library + installed core |
-| `[json]` | Default JSON events, Redis-cursor reader protocol, and SSE frames; Pydantic ≥2.10,<3 |
+| `[json]` | Default JSON events/codecs and Redis-cursor reader; Pydantic ≥2.10,<3 |
 | `[redis]` | Adds the Redis live-store adapter; Pydantic ≥2.10,<3 and redis-py ≥3.5.3 |
 
 [Demo](demos/sqlite/README.en.md) · [Performance charts](docs/performance.en.md) · [Choosing a solution](docs/comparison.en.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md) · [Releasing](docs/releasing.en.md)
 
-Source CI covers Python 3.11–3.14 on Linux/macOS; distribution and README checks run on Linux.
-Maintainer: `raja <rajawwang@foxmail.com>` (GitHub [0RAJA](https://github.com/0RAJA)).
-[MIT and attribution](docs/license.en.md); original copyright statements remain intact.
+CI covers Python 3.11–3.14 on Linux/macOS plus quality, security, and distribution checks; see [check scope](CONTRIBUTING.en.md#development-checks). Badges reflect remote main and published packages.
+[Full MIT license](LICENSE) · [Provenance and upstream declaration](docs/license.en.md); original copyright statements remain intact.

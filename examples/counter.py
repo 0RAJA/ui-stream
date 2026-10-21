@@ -38,6 +38,13 @@ class CounterCodec:
             raise InvalidEvent("Unsupported counter terminal")
         return CounterEvent("done", status)
 
+    def reset(self, reason: str) -> CounterEvent:
+        """用 Counter 的文本协议表示切换原因，不分配回执。"""
+
+        if not isinstance(reason, str):
+            raise InvalidEvent("Reset reason must be text")
+        return CounterEvent("reset", reason)
+
     def encode(self, event: CounterEvent, target: EncodingTarget) -> bytes:
         frame = f"{event.kind}:{event.value}"
         if target == EncodingTarget.ARCHIVE:

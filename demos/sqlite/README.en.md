@@ -30,6 +30,8 @@ Refresh first reads SQLite's latest snapshot/result, then follows the bounded me
 
 Button state and server-side `request_token` prevent duplicate jobs for one creation request; refresh confirms pending tokens first. This is Demo host creation idempotency, not a core exactly-once event guarantee. If the producer closes before durable completion is confirmed, the client stops automatic SSE resubscription while one-second snapshot queries and manual recovery remain available.
 
+The HTTP boundary holds `SSEBody` directly and injects the Demo encoder to retain integer cursors. Disconnect closes only that reader iterator, not the shared channel or producer. See [API](../../docs/api.en.md) for source and encoding lifetime rules.
+
 ## HTTP API and implementation entry points
 
 | HTTP | Purpose |

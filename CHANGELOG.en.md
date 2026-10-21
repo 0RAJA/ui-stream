@@ -2,6 +2,13 @@
 
 [简体中文](CHANGELOG.md)
 
+## 0.1.0a3 — Unreleased
+
+- Add required `EventCodec.reset(reason)` and previous-publisher notification from the new Runtime; transport failure returns False and degrades while rotation transactions stay with the host.
+- Deduplicate host identities before existing capacity fitting, reporting appended, duplicate, and capacity-dropped records separately without generated IDs or body deduplication.
+- Add synchronous SSEBody with injected encoders and iterator cleanup. SQLite Demo uses its own profile; the SSE module no longer requires Pydantic.
+- Add quality, code-security, dependency-audit gates and live status badges; retain upstream license notices and document APIs and migration in both languages.
+
 ## 0.1.0a2 — Dynamic policies and integration guides
 
 - `policy` accepts a no-argument `StreamPolicy` factory; each `send` takes one snapshot under its lock, with configuration changes effective on the next send.
