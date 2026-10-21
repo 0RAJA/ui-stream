@@ -2,7 +2,7 @@
 
 [English](api.en.md) · [文档导航](README.md)
 
-先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。本页对应未发布的 `0.1.0a3` 源码候选；已发布 a2 的接入升级见[迁移说明](migration.md)，升级前验证适配器契约；签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
+先阅读 [架构与概念](architecture.md)，再按下面的生命周期接入。签名以 [types.py](../src/ui_stream/types.py) 和 [runtime.py](../src/ui_stream/runtime.py) 为准，下划线开头的名称不是公开 API。
 
 ## 1. 创建 Runtime
 

@@ -2,7 +2,7 @@
 
 [简体中文](CHANGELOG.md)
 
-## 0.1.0a3 — Unreleased
+## 0.1.0a3 — Stream lifecycle and archive helpers
 
 - Add required `EventCodec.reset(reason)` and previous-publisher notification from the new Runtime; transport failure returns False and degrades while rotation transactions stay with the host.
 - Deduplicate host identities before existing capacity fitting, reporting appended, duplicate, and capacity-dropped records separately without generated IDs or body deduplication.

@@ -16,7 +16,7 @@ python -m tools.check_docs
 
 如已有 pre-commit，可运行 `pre-commit run --all-files`。核心保持零依赖，导入置顶，适配器不进入核心；修改行为应补回归，重点验证提交顺序、旧执行写入隔离、容量与异常。
 
-CI 的质量与安全任务复用本仓库全部 pre-commit hooks，使用 Bandit 扫描 `src/ui_stream`，并通过 pip-audit 查询公开运行时依赖的已知漏洞。依赖从 metadata 的核心、`json` 和 `redis` 声明解析到隔离目录，包含传递依赖，不混入扫描工具或尚未发布的 ui-stream 自身；质量和安全任务成功后才验证分发。
+CI 的质量与安全任务复用本仓库全部 pre-commit hooks，使用 Bandit 扫描 `src/ui_stream`，并通过 pip-audit 查询公开运行时依赖的已知漏洞。依赖从 metadata 的核心、`json` 和 `redis` 声明解析到隔离目录，包含传递依赖，不混入扫描工具或 ui-stream 自身；质量和安全任务成功后才验证分发。
 
 格式与代码扫描在 runner 本地执行，不上传源码；依赖审计向 PyPI 的公开漏洞接口查询包名和版本。工具由 CI 安装固定版本；本地仅在已有工具时运行，不会因检查说明自动安装。漏洞或收集/查询失败会阻止门禁，不自动修复依赖或忽略告警。README 徽章显示远端 main / 已发布包的状态，不能替代对本地候选的验证。
 

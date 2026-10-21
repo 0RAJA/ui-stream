@@ -2,7 +2,7 @@
 
 [English](CHANGELOG.en.md)
 
-## 0.1.0a3 — 未发布
+## 0.1.0a3 — 流生命周期与归档辅助
 
 - EventCodec 统一增加 `reset(reason)`；新 Runtime 可通知旧 publisher，传输失败返回 False 并降级，事务轮换仍由宿主负责。
 - 按宿主身份去重后复用容量裁剪，分别报告追加、重复和容量丢弃；不生成身份或按正文去重。

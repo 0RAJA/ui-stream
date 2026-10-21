@@ -2,7 +2,7 @@
 
 [简体中文](migration.md) · [Documentation](README.en.md)
 
-This page describes the unreleased `0.1.0a3` local candidate. Alpha protocols may change: pin the version, update adapters, and run contract tests before upgrading. The project home retains the published a2 installation command.
+Upgrading from `0.1.0a2` to `0.1.0a3` requires updating custom codecs and checking integration of previous-stream notifications, archive appends, and SSE lifetime. Pin the version, update adapters, and run contract tests before upgrading.
 
 ## Codecs must implement reset
 

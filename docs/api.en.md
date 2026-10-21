@@ -2,7 +2,7 @@
 
 [简体中文](api.md) · [Documentation](README.en.md)
 
-Read [Architecture and concepts](architecture.en.md) first, then integrate through this lifecycle. This page describes the unreleased `0.1.0a3` source candidate; see the [migration guide](migration.en.md) when upgrading from published a2 and verify adapter contracts. [types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define signatures; underscore-prefixed names are private.
+Read [Architecture and concepts](architecture.en.md) first, then integrate through this lifecycle. [types.py](../src/ui_stream/types.py) and [runtime.py](../src/ui_stream/runtime.py) define signatures; underscore-prefixed names are private.
 
 ## 1. Create a Runtime
 
