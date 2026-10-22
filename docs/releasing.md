@@ -20,10 +20,11 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
-python -m tools.verify_distribution --dist dist --check-tag v0.1.0a3
+release_tag="$(python -c 'import tomllib; from pathlib import Path; print("v" + tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])')"
+python -m tools.verify_distribution --dist dist --check-tag "$release_tag"
 ```
 
-本 alpha 使用 `v0.1.0a3` 与 prerelease 标记。必要 CI 必须覆盖待发布 commit；创建 GitHub Release 不等于 PyPI 上传成功。
+标签为 `v` 加 metadata 版本；alpha 等预发行版本在 GitHub 标记为 prerelease。必要 CI 必须覆盖发布 commit，创建 GitHub Release 不等于 PyPI 上传成功。
 
 ## Trusted Publisher 配置
 
@@ -37,10 +38,10 @@ python -m tools.verify_distribution --dist dist --check-tag v0.1.0a3
 | OIDC | 仅 publisher job 授予 `id-token: write` |
 
 1. 保留并回读 GitHub `pypi` environment 的保护：仅允许 `v*` tag，required reviewer 为 `0RAJA`；不支持这些保护时停止。
-2. 首次发布使用匹配的 PyPI pending publisher；创建项目后自动成为普通 publisher。pending publisher 不保留项目名，首次发布前需重新核查。
+2. 核对现有 PyPI Trusted Publisher 与仓库、工作流和环境匹配；通过工作流 OIDC 身份发布，不引入 API token。
 3. 由维护者在 GitHub Review deployments 批准发布；自动化不得代批或绕过。不复制 API token。
 
-官方：[pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)、[OIDC 发布](https://docs.pypi.org/trusted-publishers/using-a-publisher/)。
+官方：[Trusted Publishers](https://docs.pypi.org/trusted-publishers/)、[OIDC 发布](https://docs.pypi.org/trusted-publishers/using-a-publisher/)。
 
 ## 分发边界
 

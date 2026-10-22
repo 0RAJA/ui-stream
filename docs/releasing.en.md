@@ -20,10 +20,11 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/build_local.py --output ./dist
 python -m twine check --strict dist/*
 python tools/check_release.py --project . --dist dist
-python -m tools.verify_distribution --dist dist --check-tag v0.1.0a3
+release_tag="$(python -c 'import tomllib; from pathlib import Path; print("v" + tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])')"
+python -m tools.verify_distribution --dist dist --check-tag "$release_tag"
 ```
 
-Use `v0.1.0a3` and the prerelease flag for this alpha. Required CI must cover the release commit; creating a GitHub Release does not confirm a PyPI upload.
+Tags use `v` plus the metadata version; mark alpha and other prereleases as prereleases on GitHub. Required CI must cover the release commit. Creating a GitHub Release does not confirm a PyPI upload.
 
 ## Trusted Publisher configuration
 
@@ -37,10 +38,10 @@ Publishing trust is bound to the following account, repository, workflow, and en
 | OIDC | `id-token: write` on the publisher job only |
 
 1. Preserve and read back the GitHub `pypi` environment protections: allow only `v*` tags, with required reviewer `0RAJA`. Stop if these protections are unsupported.
-2. Use the matching PyPI pending publisher for the first upload; it becomes an ordinary publisher when the project is created. Pending publishers do not reserve names; recheck before first publication.
+2. Verify that the existing PyPI Trusted Publisher matches the repository, workflow, and environment. Publishing uses the workflow OIDC identity without introducing an API token.
 3. The maintainer approves GitHub Review deployments; automation must not approve on their behalf or bypass review. Copy no API token.
 
-Official: [pending publishers](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/), [OIDC publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/).
+Official: [Trusted Publishers](https://docs.pypi.org/trusted-publishers/), [OIDC publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/).
 
 ## Distribution boundary
 

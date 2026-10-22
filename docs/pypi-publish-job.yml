@@ -1,5 +1,4 @@
-# Reviewed activation patch: append this job under jobs in .github/workflows/release.yml
-# only after the maintainer approves the pending publisher and pypi environment.
+# Publishing job reference; keep permissions and pinned actions aligned with release.yml.
 publish:
   name: Publish verified distributions to PyPI
   needs: verify

@@ -20,7 +20,7 @@ If pre-commit is available, run `pre-commit run --all-files`. Keep core dependen
 
 The CI quality/security job reuses every repository pre-commit hook, scans `src/ui_stream` with Bandit, and queries known vulnerabilities in public runtime dependencies with pip-audit. Core, `json`, and `redis` requirements come from metadata and resolve into an isolated directory, including transitive dependencies while excluding scanner tools and ui-stream itself. Distribution checks require this job to succeed.
 
-Formatting and code scans run locally on the runner without source uploads; dependency audits query package names and versions through PyPI's public vulnerability API. CI installs pinned tool versions. Local checks use tools already available; these instructions do not install them automatically. Vulnerabilities or collection/query failures fail the gate without automatic dependency fixes or ignored advisories. README badges show remote main/published-package state, not validation of a local candidate.
+Formatting and code scans run locally on the runner without source uploads; dependency audits query package names and versions through PyPI's public vulnerability API. CI installs pinned tool versions. Local checks use tools already available; these instructions do not install them automatically. Vulnerabilities or collection/query failures fail the gate without automatic dependency fixes or ignored advisories. README badges show remote main/published-package state, not validation of local changes.
 
 ## Documentation and distributions
 
@@ -28,7 +28,7 @@ Chinese is primary; link English counterparts and align commands, APIs, versions
 
 `README.pypi.md` is generated from the Chinese README with absolute links: run `python -m tools.check_docs --write-pypi` after editing. Retain SVG sources for static images; Mermaid alone is insufficient.
 
-Release scanning expects a clean clone/export, not a development tree with a virtual environment, caches, or Demo data. The following exports tracked files from the **index**, including staged uncommitted changes, to a new temporary directory before building/checking. Confirm the index contains the intended candidate; unstaged edits are not exported. Keep your virtual environment active without copying it into the export.
+Release scanning expects a clean clone/export, not a development tree with a virtual environment, caches, or Demo data. The following exports tracked files from the **index**, including staged uncommitted changes, to a new temporary directory before building/checking. Confirm the index contains the intended changes; unstaged edits are not exported. Keep your virtual environment active without copying it into the export.
 
 ```sh
 release_source="$(mktemp -d)"
