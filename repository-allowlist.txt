@@ -91,6 +91,7 @@ tests/demo_client_contract.cjs
 tests/test_archive_append.py
 tests/test_archive_encoding.py
 tests/test_benchmarks.py
+tests/test_bootstrap_pip.py
 tests/test_contract.py
 tests/test_demo.py
 tests/test_demo_client.py
@@ -102,6 +103,7 @@ tests/test_replacement.py
 tests/test_runtime_boundaries.py
 tests/test_sse_body.py
 tools/__init__.py
+tools/bootstrap_pip.py
 tools/build_local.py
 tools/check_docs.py
 tools/check_release.py

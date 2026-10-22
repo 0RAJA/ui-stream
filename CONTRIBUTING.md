@@ -14,6 +14,8 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m tools.check_docs
 ```
 
+首次配置新的联网构建环境时，先运行 `python tools/bootstrap_pip.py`。脚本校验固定官方 pip wheel 的 SHA-256，再离线引导当前解释器；随后使用 `certifi>=2026.10.19`。已在执行测试的共享环境应另行协调更新。
+
 如已有 pre-commit，可运行 `pre-commit run --all-files`。核心保持零依赖，导入置顶，适配器不进入核心；修改行为应补回归，重点验证提交顺序、旧执行写入隔离、容量与异常。
 
 CI 的质量与安全任务复用本仓库全部 pre-commit hooks，使用 Bandit 扫描 `src/ui_stream`，并通过 pip-audit 查询公开运行时依赖的已知漏洞。依赖从 metadata 的核心、`json` 和 `redis` 声明解析到隔离目录，包含传递依赖，不混入扫描工具或 ui-stream 自身；质量和安全任务成功后才验证分发。

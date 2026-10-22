@@ -2,6 +2,8 @@
 
 [简体中文](releasing.md) · [Documentation](README.en.md)
 
+CI bootstraps pip from a fixed official wheel and SHA-256 before downloading dependencies. Publishing pins an official Action commit with updated certifi and sigstore. Verify host pip, container pip, and requests using system CAs such as OIDC/TUF separately; updating external certifi does not cover every TLS request.
+
 The Release workflow verifies artifacts before publishing to PyPI through OIDC and the protected `pypi` environment. The [publishing job reference](pypi-publish-job.yml) lists its permissions and steps.
 
 ## Verification

@@ -2,6 +2,8 @@
 
 [English](releasing.en.md) · [文档导航](README.md)
 
+CI 在首次依赖下载前用固定官方 wheel 和 SHA-256 引导 pip，发布固定到已更新 certifi 和 sigstore 的官方 Action 提交。宿主 pip、容器 pip，以及 OIDC/TUF 等使用系统 CA 的请求链路需分别核验；只更新外部 certifi 不能覆盖所有 TLS 请求。
+
 Release workflow 在验证产物后，通过 OIDC 和受保护的 `pypi` environment 发布到 PyPI；[发布任务参考](pypi-publish-job.yml)列出权限与步骤。
 
 ## 验证

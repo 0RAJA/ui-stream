@@ -14,6 +14,8 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m tools.check_docs
 ```
 
+When preparing a new networked build environment, first run `python tools/bootstrap_pip.py`. It verifies the fixed official pip wheel SHA-256 before bootstrapping the current interpreter offline; then use `certifi>=2026.10.19`. Coordinate updates to shared environments already running tests.
+
 If pre-commit is available, run `pre-commit run --all-files`. Keep core dependencies empty, imports at module scope, and adapters outside core. Add behavior regressions for commit ordering, stale-writer isolation, capacity, and exceptions.
 
 The CI quality/security job reuses every repository pre-commit hook, scans `src/ui_stream` with Bandit, and queries known vulnerabilities in public runtime dependencies with pip-audit. Core, `json`, and `redis` requirements come from metadata and resolve into an isolated directory, including transitive dependencies while excluding scanner tools and ui-stream itself. Distribution checks require this job to succeed.

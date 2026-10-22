@@ -26,9 +26,14 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
+      - name: Bootstrap hash-verified pip before dependency downloads
+        run: python tools/bootstrap_pip.py
       - name: Install pinned check tools
-        run: python -m pip install 'pre-commit==4.2.0' 'bandit==1.9.4' 'pip-audit==2.10.1'
+        run: python -m pip install 'pre-commit==4.2.0' 'bandit==1.9.4' 'pip-audit==2.10.1' 'certifi==2026.10.19' 'virtualenv==21.14.12'
       - name: Check formatting and lint
+        env:
+          VIRTUALENV_PIP: '26.2.2'
+          VIRTUALENV_NO_PERIODIC_UPDATE: '1'
         run: python -m pre_commit run --all-files --show-diff-on-failure
       - name: Scan runtime Python code
         run: python -m bandit --recursive src/ui_stream
@@ -69,8 +74,10 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
+      - name: Bootstrap hash-verified pip before dependency downloads
+        run: python tools/bootstrap_pip.py
       - name: Install declared optional profiles
-        run: python -m pip install '.[redis]'
+        run: python -m pip install 'certifi==2026.10.19' '.[redis]'
       - name: Check macOS loopback bootstrap
         if: runner.os == 'macOS'
         env:
@@ -99,8 +106,10 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
+      - name: Bootstrap hash-verified pip before dependency downloads
+        run: python tools/bootstrap_pip.py
       - name: Install build and validation dependencies
-        run: python -m pip install 'setuptools==80.9.0' build twine 'readme_renderer[md]' '.[redis]'
+        run: python -m pip install 'certifi==2026.10.19' 'setuptools==80.9.0' build twine 'readme_renderer[md]' '.[redis]'
       - name: Validate release tag
         if: github.event_name == 'release'
         env:
