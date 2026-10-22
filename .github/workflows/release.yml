@@ -30,3 +30,7 @@ jobs:
           path: dist
       - name: Publish to PyPI using Trusted Publishing
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        env:
+          SSL_CERT_FILE: /root/.local/lib/python3.13/site-packages/certifi/cacert.pem
+          SSL_CERT_DIR: /root/.local/lib/python3.13/site-packages/certifi
+          REQUESTS_CA_BUNDLE: /root/.local/lib/python3.13/site-packages/certifi/cacert.pem

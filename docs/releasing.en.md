@@ -6,6 +6,8 @@ CI bootstraps pip from a fixed official wheel and SHA-256 before downloading dep
 
 The Release workflow verifies artifacts before publishing to PyPI through OIDC and the protected `pypi` environment. The [publishing job reference](pypi-publish-job.yml) lists its permissions and steps.
 
+The publishing step sets `SSL_CERT_FILE`, `SSL_CERT_DIR`, and `REQUESTS_CA_BUNDLE` to the fixed image's patched certifi. Its package directory has no OpenSSL hashed-certificate entries, preventing fallback to system CA directories. This affects only publishing-step processes, retains certificate/hostname verification and existing attestations, and does not modify host trust. When updating the pinned Action commit, recheck container paths, certificate contents, and the OIDC/TUF/upload clients.
+
 ## Verification
 
 | Stage | Required checks |

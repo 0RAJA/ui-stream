@@ -6,6 +6,8 @@ CI 在首次依赖下载前用固定官方 wheel 和 SHA-256 引导 pip，发布
 
 Release workflow 在验证产物后，通过 OIDC 和受保护的 `pypi` environment 发布到 PyPI；[发布任务参考](pypi-publish-job.yml)列出权限与步骤。
 
+发布步骤通过 `SSL_CERT_FILE`、`SSL_CERT_DIR` 和 `REQUESTS_CA_BUNDLE`，显式使用固定镜像内已修复的 certifi；其包目录没有 OpenSSL 哈希证书入口，可避免回落到系统 CA 目录。该选择仅影响发布步骤的进程，保留证书、主机名校验和原有产物证明，不修改宿主信任。升级 Action 固定提交时，需重新核对容器内路径、证书内容及 OIDC/TUF/上传客户端。
+
 ## 验证
 
 | 阶段 | 必需检查 |
