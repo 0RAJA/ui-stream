@@ -1,16 +1,28 @@
-# 从 a2 迁移到 a3
+# 迁移说明
 
 [English](migration.en.md) · [文档导航](README.md)
 
+## 从 a3 升级到 a4
+
+- 将 `finish_retry()` 替换为 `close_for_retry()`，不提供兼容别名。它仍只尝试 checkpoint 后关闭，不提交最终结果、不调度重算，也不是持久化成功回执。
+- 移除 codec、策略工厂和端口回调对同一 Runtime 的写入，把这些操作放回宿主任务调用序列。实例仍打开的提交前重入会抛 `ReentrantStreamOperation`，不应当作后端故障盲目重试。进入写端口后异常逃出外层时同时记录 DEGRADED，后续提交保留；I/O 前拒绝及被宿主捕获的内层拒绝不因此降级。同线程属性读取仍可用。持锁端口不得等待另一线程读取锁保护属性或调用需同一锁的方法。提交后的终态回调写入先得到关闭异常，外层仍按通知失败规则处理，见 [API](api.md)。
+- 策略只接受非负内置 int，不接受 IntEnum 等 int 子类。外部配置应显式转换和验证；bool、浮点数、字符串和负数会在事件 I/O 前被拒绝。零值保持逐字段语义，包括每条 checkpoint/活动检查。
+- 启用 `state_check` 时，首次迭代先检查，再读取实时数据；后续保持配置间隔。首次额外调用一次宿主回调，宜保持轻量。初始 reset/检查异常不暴露旧事件，初始终态仍先排空尾流。创建 HTTP 响应前仍应完成鉴权。
+- `Binding`、`Checkpoint`、`EncodingTarget` 和组装 Protocol 也从 `ui_stream` 导出；原 `ui_stream.types` 导入仍然有效。
+
+现行异常与零值契约见 [API](api.md)。升级后运行宿主自己的适配器和消费契约测试。
+
+## 从 a2 升级到 a3
+
 从 `0.1.0a2` 升级到 `0.1.0a3` 时，需要更新自定义 codec，并检查旧流通知、归档追加和 SSE 生命周期的接入方式。升级前固定版本、更新适配器并运行契约测试。
 
-## Codec 必须实现 reset
+### Codec 必须实现 reset
 
 `EventCodec` 统一要求 `business(data)`、`terminal(status)`、`reset(reason)`、`encode(event, target)`。自定义 codec 必须补上 reset；Runtime 不探测旧协议。默认 `JsonEventCodec.reset(reason)` 构造无游标的 `STREAM_RESET`，数据为 `{"reason": reason}`。构造/编码错误直接传播。已有终态请复用 `codec.terminal(status)`。
 
 [Counter](../examples/counter.py) 和 [DemoCodec](../demos/sqlite/events.py) 展示自定义非默认协议；a2 的固定/动态 policy 规则保持不变。
 
-## 轮换执行后通知旧通道
+### 轮换执行后通知旧通道
 
 宿主先提交新 execution 的持久轮换和旧执行写入隔离，再在新 Runtime 调用 `announce_replacement(previous_publisher)`，传旧执行的 publisher。下面仅展示内存端口调用；数据库事务与 execution fencing 由宿主实现。
 
@@ -26,9 +38,9 @@ runtime.finish(status="DONE", completion=4)
 assert store.snapshot.result == 4
 ```
 
-新 Runtime 的 codec 构造 `reset("execution_replaced")` 并校验 LIVE 编码。只有旧 publisher 发布时的 `live_errors` 被降级：返回 False，标记新 Runtime 的 DEGRADED，并记录身份及异常类型，不记录正文。其他错误传播；True 仅表示 publish 正常返回。此调用不累计预算、不归档、不关闭执行或自动重试。未收到通知的读者仍需宿主状态复核兜底。两端必须使用匹配的事件协议。
+新 Runtime 的 codec 构造 `reset("execution_replaced")` 并校验 LIVE 编码。除直接传播的 `ReentrantStreamOperation` 外，只有旧 publisher 发布时的 `live_errors` 被降级：返回 False，标记新 Runtime 的 DEGRADED，并记录身份及异常类型，不记录正文。其他错误传播；True 仅表示 publish 正常返回。此调用不累计预算、不归档、不关闭执行或自动重试。未收到通知的读者仍需宿主状态复核兜底。两端必须使用匹配的事件协议。
 
-## 归档追加按宿主身份去重
+### 归档追加按宿主身份去重
 
 ```python
 from ui_stream.archive import append_archive_events
@@ -48,7 +60,7 @@ assert not result.truncated
 
 结果包含新列表 `events`、本批新增 `appended_count`、重复 `duplicate_count`、容量丢弃 `dropped_count`；三项之和等于 incoming 长度，`truncated` 表示容量丢弃。去重先于容量检查，因此被容量拒绝的首条记录之后，相同 ID 仍计重复。已有超大数据不会被清洗；容量拒绝第一条候选后不跳过它接收后面的更小事件。宿主负责事务和以实际存储表示计量 `event_size`，尤其是公开序列化隐藏的内部字段。
 
-## HTTP 层直接持有同步 SSEBody
+### HTTP 层直接持有同步 SSEBody
 
 ```python
 from ui_stream.sse import SSEBody, encode_sse_heartbeat

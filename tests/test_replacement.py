@@ -201,7 +201,7 @@ class ReplacementTest(unittest.TestCase):
     def test_closed_runtime_rejects_notification_before_touching_previous_stream(self):
         runtime, _, _ = make_counter()
         _, previous, _ = make_counter()
-        runtime.finish_retry()
+        runtime.close_for_retry()
         with self.assertRaises(ClosedStream):
             self.announce(runtime, previous)
         self.assertEqual(previous.frames, [])

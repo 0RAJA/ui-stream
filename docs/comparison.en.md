@@ -35,7 +35,7 @@ These layers can compose: ui-stream could coordinate progress/commits while ASGI
 
 - **Restore the current UI:** read the latest snapshot/result, then attach the live tail; intermediate progress may be missing. This is ui-stream's target, with host-owned reads and handoff.
 - **Recover events:** retain events and implement cursor recovery. Django EventStream's storage mode targets this requirement more directly.
-- **Resume computation:** persist execution state and arrange checkpoint-based scheduling through LangGraph or another execution framework. ui-stream's `finish_retry()` only checkpoints and closes; it does not rerun tasks.
+- **Resume computation:** persist execution state and arrange checkpoint-based scheduling through LangGraph or another execution framework. ui-stream's `close_for_retry()` only attempts a checkpoint and closes; it does not rerun tasks.
 
 None implies end-to-end exactly-once delivery. ui-stream does not deduplicate events; SSE IDs, process-local locks, and host fencing have different scopes.
 

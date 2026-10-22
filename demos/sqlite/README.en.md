@@ -32,6 +32,8 @@ Button state and server-side `request_token` prevent duplicate jobs for one crea
 
 The HTTP boundary holds `SSEBody` directly and injects the Demo encoder to retain integer cursors. Disconnect closes only that reader iterator, not the shared channel or producer. See [API](../../docs/api.en.md) for source and encoding lifetime rules.
 
+This Demo has no timestamp-based watchdog; `touch_activity` only checks the current execution. A process lease prevents concurrent hosts, and restart interrupts leftover jobs. A real host using activity-based liveness should persist timestamps in checkpoint/touch; see the [API](../../docs/api.en.md).
+
 ## HTTP API and implementation entry points
 
 | HTTP | Purpose |

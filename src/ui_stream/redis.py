@@ -143,7 +143,7 @@ class RedisLiveStore:
         payload = fields.get(PAYLOAD_FIELD.encode("utf-8")) or fields.get(PAYLOAD_FIELD)
         if payload is None:
             logger.warning(
-                "UI stream流事件缺少 payload 字段",
+                "UI stream entry has no payload",
                 extra={"redis_key": redis_key, "stream_id": stream_id},
             )
             return None
@@ -153,7 +153,7 @@ class RedisLiveStore:
             self._serializer(event, include_stream_id=False)
         except (ValidationError, *self._invalid_event_errors):
             logger.warning(
-                "UI stream流事件解析失败",
+                "UI stream entry payload is invalid",
                 extra={"redis_key": redis_key, "stream_id": stream_id},
             )
             return None

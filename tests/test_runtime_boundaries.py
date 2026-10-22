@@ -100,7 +100,7 @@ class RuntimeReviewRegressions(unittest.TestCase):
                     archive_status=status,
                     after_close=summaries.append,
                 )
-                runtime.finish_retry()
+                runtime.close_for_retry()
                 self.assertEqual(summaries[0].archive_status, status)
                 self.assertEqual(summaries[0].degraded, status == Integrity.DEGRADED)
                 self.assertEqual(summaries[0].truncated, status == Integrity.TRUNCATED)
@@ -419,7 +419,7 @@ class RuntimePolicyTest(unittest.TestCase):
 
                 runtime, _, _ = make_counter(policy=policy_factory)
                 if retry:
-                    runtime.finish_retry()
+                    runtime.close_for_retry()
                 else:
                     runtime.finish(status="DONE", completion=0)
                 self.assertTrue(runtime.closed)

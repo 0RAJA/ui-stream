@@ -96,11 +96,13 @@ tests/test_contract.py
 tests/test_demo.py
 tests/test_demo_client.py
 tests/test_docs.py
+tests/test_policy.py
 tests/test_publishing.py
 tests/test_reader_state.py
 tests/test_release_checks.py
 tests/test_replacement.py
 tests/test_runtime_boundaries.py
+tests/test_runtime_reentrancy.py
 tests/test_sse_body.py
 tools/__init__.py
 tools/bootstrap_pip.py

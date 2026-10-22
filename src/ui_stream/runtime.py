@@ -10,11 +10,13 @@ send 经 codec 校验/计量、实时发布，再进入缓冲与 checkpoint；fi
 import logging
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Callable, Generic
 from uuid import UUID
 
 from ui_stream.archive import merge_archive_status
-from ui_stream.exceptions import ArchiveUnavailable, ClosedStream, LiveUnavailable
+from ui_stream.exceptions import ArchiveUnavailable, ClosedStream, LiveUnavailable, ReentrantStreamOperation
 from ui_stream.types import (
     AfterClose,
     ArchiveStore,
@@ -38,8 +40,10 @@ class StreamRuntime(Generic[EventT]):
     使用方（宿主应用）先创建 execution 并组装三个端口，再反复 send，最后调用 finish。
     Runtime 把暂未归档的事件保存在 pending 缓冲中，达到阈值后交给 ArchiveStore。
     policy 可为固定值或无参工厂；每次 send 共用一份策略，配置变化在下次发送时生效。
-    实例内的 RLock 覆盖端口 I/O，保证同一实例按取得锁的顺序处理；不同实例/进程的
-    执行隔离由宿主存储端校验。成功 finish 或 finish_retry 后，这个实例不再接受写入。
+    实例内 RLock 覆盖端口 I/O，保证同一实例按取得锁的顺序处理；同线程回调可读取属性。
+    实例仍打开时禁止写操作重入；端口不得阻塞等待另一线程调用需同一锁的方法或属性，
+    包括 pending_count、closed、archive_status，否则可能死锁。跨实例/进程隔离由存储端校验。
+    成功 finish 或 close_for_retry 后，这个实例不再接受写入。
     """
 
     def __init__(
@@ -65,10 +69,12 @@ class StreamRuntime(Generic[EventT]):
             archive_store: 宿主实现的归档与最终结果存储端口。
             archive_status: 此次执行已有的归档状态，后续只会向更严重的状态合并。
             policy: 固定 StreamPolicy 或返回它的无参工厂；构造时不执行工厂。
-                工厂只计算或读取配置，不应重入本实例的 send/finish/finish_retry。
+                工厂只计算或读取配置，不应重入本实例的 send/finish/close_for_retry。
             after_close: 关闭后接收 Summary 的可选观察者，在释放实例锁后调用。
             archive_errors: 中间归档时允许降级继续的异常类型；最终 commit 异常仍传播。
-            live_errors: 业务实时发布时允许降级继续的异常类型。
+            live_errors: 业务实时发布时允许降级继续的异常类型。实例仍打开时的写重入
+                抛 ReentrantStreamOperation，不受这两个后端异常配置影响；提交后的
+                终态通知另按 Exception 处理，不改变已提交结果。
             closed_error: send/finish 使用已关闭实例时抛出的无参异常类型。
         """
 
@@ -84,6 +90,8 @@ class StreamRuntime(Generic[EventT]):
         self._archive_status = archive_status
         # 锁覆盖端口 I/O 与缓冲更新，避免同一实例内发布返回顺序打乱归档顺序。
         self._lock = threading.RLock()
+        self._write_in_progress = False
+        self._possible_side_effect = False
         self._pending: list[EventT] = []
         self._pending_bytes = 0
         self._closed = False
@@ -132,140 +140,179 @@ class StreamRuntime(Generic[EventT]):
 
     @property
     def closed(self) -> bool:
-        """是否已在正常 finish 或 finish_retry 后关闭；最终 commit 抛错时保持未关闭。"""
+        """是否已在正常 finish 或 close_for_retry 后关闭；最终 commit 抛错时保持未关闭。"""
 
         with self._lock:
             return self._closed
 
     def send(self, data: Any) -> EventT | None:
-        """处理一条业务进度：构造并校验、尝试实时发布，再加入归档缓冲。
+        """处理一条业务进度，先校验与发布，再缓冲并按阈值归档。
 
-        设计意图：发布前验证业务输入，避免把编码错误误当作后端故障；发布后按新增回执计量归档。
-        达到 checkpoint 阈值会同步调用存储端，因此一次 send 也可能包含归档 I/O。
-        进入实例锁并确认未关闭后，只读取一次 policy；全部容量与活动判断共用这份快照。
-        工厂异常或返回类型错误在事件处理、计数及外部写入之前直接传播，不作为后端降级。
+        一次 send 共用一份 policy，并可能同步执行端口 I/O。可恢复发布/归档故障只降级；
+        返回事件不代表送达或持久保存。归档编码在发布后失败时，已经发生的实时写入不回滚。
 
         Args:
-            data: 交给 codec.business 的业务输入，结构和合法性由所选 codec 决定。
+            data: 交给 codec.business 的输入，结构和合法性由 codec 决定。
 
         Returns:
-            用于后续归档的事件；发布成功时可能带回执，实时降级或停止时仍可返回原事件。
-            单条 LIVE 编码超过 max_event_bytes 时返回 None。返回事件不代表已实时送达或归档成功。
+            后续归档使用的事件，可能带发布回执；单条 LIVE 编码超限时返回 None。
+            条数触顶或实时降级时仍可返回事件，即使它未被发布或加入归档缓冲。
 
-        max_events 触顶后仍可实时发送，但不再缓冲新事件。编码错误和未配置为可恢复的端口异常
-        直接传播；若归档编码在发布后失败，已发生的实时写入不会回滚。
+        Raises:
+            ClosedStream: 实例已关闭时的默认异常，可由 closed_error 替换。
+            ReentrantStreamOperation: 实例仍打开时，端口或策略工厂重入同一实例的写操作。
+                若本次已进入可能写入的端口则同时记 DEGRADED，表示完整性不确定而非确认丢失。
+            TypeError: 策略工厂未返回 StreamPolicy。
+            Exception: codec 构造/编码错误或未配置为可恢复的端口错误原样传播。
+                默认 codec 的非法输入使用 InvalidEvent；fencing 通常使用 StaleExecution。
         """
 
         with self._lock:
             self._require_open()
-            # 本次发送共用同一策略，发布或归档期间配置变化只影响下一次 send。
-            policy = self.policy
-            ui_event = self._codec.business(data)
-            # 先编码：非法 data 属于接入错误，必须在任何降级判断前暴露。
-            live_payload_size = len(self._codec.encode(ui_event, EncodingTarget.LIVE))
-            if not self._accept_business_event(payload_size=live_payload_size, policy=policy):
-                return None
-            self._business_event_count += 1
-            self._business_event_bytes += live_payload_size
-            ui_event = self._write_live(ui_event, payload_size=live_payload_size, policy=policy)
-            # publisher 可返回带回执的副本；按发布后的 ARCHIVE 编码计量，避免漏算回执占用。
-            archive_payload_size = len(self._codec.encode(ui_event, EncodingTarget.ARCHIVE))
-            self._buffer(ui_event, payload_size=archive_payload_size, policy=policy)
-            return ui_event
+            with self._write_operation():
+                # 本次发送共用同一策略，发布或归档期间配置变化只影响下一次 send。
+                policy = self.policy
+                ui_event = self._codec.business(data)
+                # 先编码：非法 data 属于接入错误，必须在任何降级判断前暴露。
+                live_payload_size = len(self._codec.encode(ui_event, EncodingTarget.LIVE))
+                if not self._accept_business_event(payload_size=live_payload_size, policy=policy):
+                    return None
+                self._business_event_count += 1
+                self._business_event_bytes += live_payload_size
+                ui_event = self._write_live(ui_event, payload_size=live_payload_size, policy=policy)
+                # publisher 可返回带回执的副本；按发布后的 ARCHIVE 编码计量，避免漏算回执占用。
+                archive_payload_size = len(self._codec.encode(ui_event, EncodingTarget.ARCHIVE))
+                self._buffer(ui_event, payload_size=archive_payload_size, policy=policy)
+                return ui_event
 
     def announce_replacement(self, previous_publisher: LivePublisher[EventT]) -> bool:
-        """向旧实时流发送切换提示，传输失败只降级这个新 Runtime。
+        """向旧实时流发送切换提示，传输故障只降级这个新 Runtime。
 
-        宿主先在事务中完成新代际绑定及旧写者隔离，再调用此方法；通知不执行轮换或重试。
-        构造与 LIVE 编码错误直接传播；只有 publish 的 live_errors 返回 False 并记降级。
-        True 仅表示发布端正常返回，不保证旧读者已收到。此通知不归档、不计业务预算，
-        不读取 policy 或更换本实例通道；失败日志使用新绑定，不记录正文或异常详情。
+        宿主先提交 execution 轮换和旧写者隔离；本方法不轮换、不归档、不计预算，也不重试。
+        只有发布阶段的 live_errors 返回 False 并记降级；日志只含新绑定与异常类型。
+
+        Args:
+            previous_publisher: 绑定旧执行通道的发布端，须接受新 codec 构造的同一事件协议。
+
+        Returns:
+            发布端正常返回时为 True，不保证旧读者收到；配置内传输故障时为 False。
+
+        Raises:
+            ClosedStream: 实例已关闭时的默认异常，可由 closed_error 替换。
+            ReentrantStreamOperation: 实例仍打开时写操作发生重入，原样传播；
+                若已进入写端口则标记 DEGRADED，不转换为 False。
+            Exception: reset 构造、LIVE 编码及未配置为可恢复的发布异常原样传播。
         """
 
         with self._lock:
             self._require_open()
-            event = self._codec.reset(_REPLACEMENT_REASON)
-            self._codec.encode(event, EncodingTarget.LIVE)
-            try:
-                previous_publisher.publish(event)
-            except self._live_errors as error:
-                self._degrade(
-                    "UI stream replacement announcement unavailable",
-                    status=Integrity.DEGRADED,
-                    extra={"operation": "announce_replacement", "error_type": type(error).__name__},
-                )
-                return False
-            return True
+            with self._write_operation():
+                event = self._codec.reset(_REPLACEMENT_REASON)
+                self._codec.encode(event, EncodingTarget.LIVE)
+                try:
+                    self._possible_side_effect = True
+                    previous_publisher.publish(event)
+                except ReentrantStreamOperation:
+                    raise
+                except self._live_errors as error:
+                    self._degrade(
+                        "UI stream replacement announcement unavailable",
+                        status=Integrity.DEGRADED,
+                        extra={"operation": "announce_replacement", "error_type": type(error).__name__},
+                    )
+                    return False
+                return True
 
-    def finish_retry(self) -> None:
-        """在宿主准备重试任务前，尝试保存当前缓冲并关闭本 Runtime。
+    def close_for_retry(self) -> None:
+        """为宿主重新执行任务收场，尝试 checkpoint 后关闭本 Runtime。
 
-        它只调用 checkpoint，不构造终态、不调用 commit，也不保存最终业务结果。
-        后续如何重新执行任务、选择新的 execution 并组装 Runtime，由宿主决定。
-        配置的归档故障会降级后继续关闭，剩余缓冲此时可能未保存；其他异常传播。
-        重复调用已关闭实例直接返回。
+        不构造终态、不调用 commit，也不保存最终业务结果。配置内归档故障会降级后继续关闭，
+        所以正常返回不是持久化成功回执；剩余 pending 可能未保存。已关闭时重复调用直接返回。
+        任务调度、执行轮换和是否重跑计算由宿主决定。
+
+        Returns:
+            None。只表示本次关闭流程已完成，不确认任务已被调度或进度已持久化。
+
+        Raises:
+            ReentrantStreamOperation: 实例仍打开时，同一实例的写操作发生重入。
+                若本次已进入可能写入的端口则同时记 DEGRADED，表示完整性不确定而非确认丢失。
+            Exception: 未配置为可恢复的 checkpoint 异常原样传播，此时保持未关闭。
+                默认配置下 StaleExecution 不会被当作临时归档故障吞掉。
         """
 
         with self._lock:
             if self._closed:
                 return
-            try:
-                self._checkpoint()
-            except self._archive_errors:
-                self._degrade("UI stream retry checkpoint unavailable", status=Integrity.DEGRADED)
-            self._closed = True
-            summary = self._freeze_summary(status="RETRY", error_code="")
+            with self._write_operation():
+                try:
+                    self._checkpoint()
+                except ReentrantStreamOperation:
+                    raise
+                except self._archive_errors:
+                    self._degrade("UI stream checkpoint before retry close unavailable", status=Integrity.DEGRADED)
+                self._closed = True
+                summary = self._freeze_summary(status="RETRY", error_code="")
         self._notify_closed(summary)
 
     def finish(self, *, status: str, completion: Any, error_code: str = "") -> None:
-        """结束本次执行：先提交归档尾部与业务结果，再关闭并尝试发布实时终态。
+        """先提交归档尾部与业务结果，再关闭并尝试发送实时终态。
 
-        设计意图：UI 收到结束通知时，宿主最终结果应已可读取。ArchiveStore.commit 必须在
-        同一事务中保存尾部、终态和 completion，并拒绝不再允许写入的 execution。
+        ArchiveStore.commit 应在同一事务内保存尾部、终态及 completion，并校验 execution。
+        编码或 commit 失败时保留 pending 和打开状态；宿主先确认提交结果，再决定是否重试。
+        成功提交后的终态发布和 after_close 的 Exception 只降级或记录日志，不撤销提交。
 
         Args:
-            status: 交给 codec.terminal 的业务终态；默认 JSON codec 接受 SUCCESS/FAILED，
-                自定义 codec 可以使用自己的状态，例如 Counter 的 DONE。
-            completion: 交给 ArchiveStore.commit 保存的最终业务结果，Runtime 不解释其结构。
-            error_code: 只写入 after_close 的 Summary，便于统计；不自动加入终态或 completion。
+            status: 交给 codec.terminal 的业务终态；默认 JSON 使用 SUCCESS/FAILED，
+                自定义 codec 可使用自己的词汇，例如 Counter 的 DONE。
+            completion: 交给 commit 保存的最终业务结果，Runtime 不解释其结构。
+            error_code: 仅进入关闭 Summary，不自动写入终态或 completion。
 
-        终态编码或 commit 失败时异常传播，pending 和未关闭状态保留；不发布实时终态或通知观察者。
-        宿主须先确认提交结果，再决定是否重试，存储端负责不确定写入后的幂等。
-        成功提交后，终态发布和观察者的 Exception 不改变已提交结果；再次 finish 抛 closed_error。
+        Returns:
+            None。正常返回表示 commit 已按存储端契约成功，不保证实时终态已送达。
+
+        Raises:
+            ClosedStream: 实例已关闭时的默认异常，可由 closed_error 替换。
+            ReentrantStreamOperation: 实例仍打开时，提交前的端口或 codec 重入同一实例写操作。
+                若本次已进入可能写入的端口则同时记 DEGRADED，表示完整性不确定而非确认丢失。
+            Exception: 终态构造/编码及 commit 的异常原样传播；commit 的 ArchiveUnavailable
+                也不会降级吞掉。超时后的写入结果可能不确定，幂等由存储端保证。
         """
 
         with self._lock:
             self._require_open()
-            terminal_event = self._codec.terminal(status)
-            self._codec.encode(terminal_event, EncodingTarget.ARCHIVE)
-            self._codec.encode(terminal_event, EncodingTarget.LIVE)
-            persisted_status = self._archive_store.commit(
-                binding=self._binding,
-                events=tuple(self._pending),
-                terminal_event=terminal_event,
-                archive_status=self._archive_status,
-                completion=completion,
-            )
-            self._archive_status = merge_archive_status(self._archive_status, persisted_status)
-            self._observe_archive_status(persisted_status)
-            self._pending.clear()
-            self._pending_bytes = 0
-            self._closed = True
-            self._publish_terminal(terminal_event)
-            summary = self._freeze_summary(status=str(status), error_code=error_code)
+            with self._write_operation():
+                terminal_event = self._codec.terminal(status)
+                self._codec.encode(terminal_event, EncodingTarget.ARCHIVE)
+                self._codec.encode(terminal_event, EncodingTarget.LIVE)
+                self._possible_side_effect = True
+                persisted_status = self._archive_store.commit(
+                    binding=self._binding,
+                    events=tuple(self._pending),
+                    terminal_event=terminal_event,
+                    archive_status=self._archive_status,
+                    completion=completion,
+                )
+                self._archive_status = merge_archive_status(self._archive_status, persisted_status)
+                self._observe_archive_status(persisted_status)
+                self._pending.clear()
+                self._pending_bytes = 0
+                self._closed = True
+                self._publish_terminal(terminal_event)
+                summary = self._freeze_summary(status=str(status), error_code=error_code)
         self._notify_closed(summary)
 
     def _publish_terminal(self, terminal_event: EventT) -> None:
         """最终提交后的实时终态通知，独立于业务事件的实时预算。
 
-        发布 Exception 只降低本实例完整性，不回滚结果，也不会再写一次已提交的归档。
+        此时实例已关闭；通知回调再次 send 会先抛 closed_error，同样作为通知 Exception
+        降级处理。它不向外层 finish 传播，也不回滚或重复提交已经保存的结果。
         """
 
         try:
             self._publisher.publish(terminal_event)
         except Exception:
             # 此时宿主结果已提交；通知失败只能影响当前汇总，不能回滚或重复提交结果。
-            self._degrade("UI stream终止事件实时发布失败", status=Integrity.DEGRADED)
+            self._degrade("UI stream terminal publication unavailable", status=Integrity.DEGRADED)
 
     def _accept_business_event(self, *, payload_size: int, policy: StreamPolicy) -> bool:
         """拒绝超大的单事件，并在条数阈值后停止归档缓冲。
@@ -275,7 +322,7 @@ class StreamRuntime(Generic[EventT]):
 
         if payload_size > policy.max_event_bytes:
             self._degrade(
-                "UI stream流式事件超过单条上限",
+                "UI stream event exceeds byte limit",
                 status=Integrity.TRUNCATED,
                 extra={"payload_size": payload_size},
             )
@@ -284,7 +331,7 @@ class StreamRuntime(Generic[EventT]):
             if not self._archive_stopped:
                 self._archive_stopped = True
                 self._degrade(
-                    "UI stream流式事件超过条数上限",
+                    "UI stream event count limit reached",
                     status=Integrity.TRUNCATED,
                 )
         return True
@@ -293,18 +340,22 @@ class StreamRuntime(Generic[EventT]):
         """超出实时字节预算后停止业务发布；配置内故障降级并返回原事件，其他异常传播。
 
         仅成功返回的发布计入实时字节预算，网络结果不确定时不会自动重发或去重。
+        因此该预算不是实际网络总字节的硬上限，也不约束 publisher 内部重试。
         """
 
         if self._live_stopped:
             return event
         if self._live_business_bytes + payload_size > policy.max_live_bytes:
             self._live_stopped = True
-            self._degrade("UI stream流式实时字节超过上限", status=Integrity.DEGRADED)
+            self._degrade("UI stream live byte budget exhausted", status=Integrity.DEGRADED)
             return event
         try:
+            self._possible_side_effect = True
             published = self._publisher.publish(event)
+        except ReentrantStreamOperation:
+            raise
         except self._live_errors:
-            self._degrade("UI stream流式实时写入失败", status=Integrity.DEGRADED)
+            self._degrade("UI stream live publication unavailable", status=Integrity.DEGRADED)
             return event
         self._live_business_bytes += payload_size
         return published
@@ -328,15 +379,17 @@ class StreamRuntime(Generic[EventT]):
             # checkpoint；成功后继续接收当前事件，失败或持久归档已耗尽才截断。
             try:
                 self._checkpoint()
+            except ReentrantStreamOperation:
+                raise
             except self._archive_errors:
                 self._degrade(
-                    "UI stream流式缓冲触顶前归档失败",
+                    "UI stream checkpoint before capacity limit unavailable",
                     status=Integrity.DEGRADED,
                 )
         if self._archive_stopped or self._pending_bytes + payload_size > policy.max_archive_bytes:
             self._archive_stopped = True
             self._degrade(
-                "UI stream流式待归档缓冲超过上限",
+                "UI stream pending byte capacity exhausted",
                 status=Integrity.TRUNCATED,
             )
             self._touch_activity_if_due(policy=policy)
@@ -350,8 +403,10 @@ class StreamRuntime(Generic[EventT]):
         ):
             try:
                 self._checkpoint()
+            except ReentrantStreamOperation:
+                raise
             except self._archive_errors:
-                self._degrade("UI stream流式自动归档失败", status=Integrity.DEGRADED)
+                self._degrade("UI stream automatic checkpoint unavailable", status=Integrity.DEGRADED)
 
     def _checkpoint(self) -> None:
         """把当前 pending 批次交给宿主，确认整批处理后才清空缓冲。
@@ -362,6 +417,7 @@ class StreamRuntime(Generic[EventT]):
 
         if not self._pending:
             return
+        self._possible_side_effect = True
         result = self._archive_store.checkpoint(
             binding=self._binding,
             events=tuple(self._pending),
@@ -387,9 +443,12 @@ class StreamRuntime(Generic[EventT]):
         if not self._activity_checkpoint_due(policy=policy):
             return
         try:
+            self._possible_side_effect = True
             self._archive_store.touch_activity(binding=self._binding)
+        except ReentrantStreamOperation:
+            raise
         except self._archive_errors:
-            self._degrade("UI stream流式活动刷新失败", status=Integrity.DEGRADED)
+            self._degrade("UI stream activity refresh unavailable", status=Integrity.DEGRADED)
             return
         self._last_activity_checkpoint_at = time.monotonic()
 
@@ -423,8 +482,34 @@ class StreamRuntime(Generic[EventT]):
         elif status == Integrity.TRUNCATED:
             self._truncated = True
 
+    @contextmanager
+    def _write_operation(self) -> Iterator[None]:
+        """实例仍打开且持锁时拒绝嵌套写入，同线程属性读取仍可复用 RLock。
+
+        端口回调重入会打乱发布顺序或让外层清空新加入的 pending，不能仅依赖可重入锁。
+        只有重入异常逃出外层且已进入写端口时才降级；含最终 commit，但不证明数据已丢失。
+        标志每次操作独立，并在 finally 释放；宿主自行捕获内层拒绝不会影响成功的外层调用。
+        """
+
+        if self._write_in_progress:
+            raise ReentrantStreamOperation("Runtime write operations must not reenter the same instance")
+        self._write_in_progress = True
+        self._possible_side_effect = False
+        try:
+            yield
+        except ReentrantStreamOperation:
+            if self._possible_side_effect:
+                self._degrade("UI stream reentrant operation interrupted a possible write", status=Integrity.DEGRADED)
+            raise
+        finally:
+            self._possible_side_effect = False
+            self._write_in_progress = False
+
     def _require_open(self) -> None:
-        """关闭后继续 send/finish 属于生命周期错误，抛出宿主配置的 closed_error。"""
+        """关闭后继续写入抛 closed_error；该检查先于写重入检测。
+
+        因此提交后的终态通知回调 send/finish/announce_replacement 先得到关闭异常。
+        """
 
         if self._closed:
             raise self._closed_error()

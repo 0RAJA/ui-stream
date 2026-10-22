@@ -15,7 +15,7 @@ ui-stream 适合已经有后台任务和业务存储的 Python 应用。它负�
 需要 Python ≥3.11 和已启用的虚拟环境。安装核心包，import 名为 `ui_stream`：
 
 ```sh
-python -m pip install ui-stream==0.1.0a3
+python -m pip install --pre ui-stream
 ```
 
 ## 最小示例

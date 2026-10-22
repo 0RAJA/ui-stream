@@ -12,7 +12,7 @@ For a first integration, follow the first three rows: run an example, understand
 | Explore browser interaction, persistence, and recovery | [SQLite Demo](../demos/sqlite/README.en.md) |
 | Inspect measurements and related tools | [Performance charts and acceptance](performance.en.md) / [Choosing a solution](comparison.en.md) |
 | Contribute or report vulnerabilities | [Contributing](../CONTRIBUTING.en.md) / [Security](../SECURITY.en.md) |
-| Upgrade a2 to a3 | [Migration](migration.en.md): codecs, replacement notification, archive append, SSE lifetime |
+| Upgrade an existing integration | [Migration](migration.en.md): naming, policies, reader checks, and older interfaces |
 | Build and publish | [Release process](releasing.en.md) |
 | Inspect provenance and changes | [License](license.en.md) / [Provenance](../PROVENANCE.en.md) / [Changelog](../CHANGELOG.en.md) |
 

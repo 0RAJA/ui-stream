@@ -155,6 +155,8 @@ class SQLiteRepository:
         return Checkpoint(archive_status=integrity)
 
     def touch_activity(self, *, binding):
+        """Demo 无活动时间 watchdog，只做 fencing；恢复由进程租约和启动时中断处理。"""
+
         with self.transaction() as db:
             self._require_current(db, binding)
 

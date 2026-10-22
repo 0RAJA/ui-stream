@@ -2,6 +2,14 @@
 
 [English](CHANGELOG.en.md)
 
+## 0.1.0a4 — 写入完整性与接入契约
+
+- **Breaking:** `finish_retry()` 更名为 `close_for_retry()`，不保留兼容别名；只尝试 checkpoint 后关闭，不自动重试或提交最终结果。
+- **Breaking:** `StreamPolicy` 在构造时只接受非负内置 int；bool、int 子类、浮点数、字符串等类型及负数被拒绝，合法零值语义保留。
+- **Breaking:** 配置 `state_check` 时，`iter_live` 首次迭代在任何实时读取前检查状态；终态提示仍先排空尾流。
+- 拒绝同实例写重入；可能已发生写入的重入异常同时记录 DEGRADED，后续提交保留该状态，允许同线程只读回调。
+- 顶层导出 Runtime 组装所需类型；统一英文诊断日志，完善异常、活动刷新、同步取消与双语使用契约。
+
 ## 0.1.0a3 — 流生命周期与归档辅助
 
 - EventCodec 统一增加 `reset(reason)`；新 Runtime 可通知旧 publisher，传输失败返回 False 并降级，事务轮换仍由宿主负责。

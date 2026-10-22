@@ -47,18 +47,27 @@ def iter_live(
         clock: 单调时钟，便于测试时间边界。
         live_errors: 读取遇到这些异常时结束本次迭代，不伪造业务终态。
         state_check: 可选无参宿主检查，返回关闭控制事件或 None；权限等异常直接传播。
-        state_poll_interval: 启用检查后的秒间隔，必须为正；首次检查也在间隔到期后。
+        state_poll_interval: 后续检查的秒间隔，必须为正；首次迭代先检查，再读取实时流。
 
     收到原始 stream_end 时原样输出并结束。宿主检查返回 stream_end 提示时，先非阻塞排空
     已发布尾流，直到没有原始 entry 才输出合成提示；脏数据批次不等于尾流为空。
     其他非空状态提示（如 stream_reset）立即输出并关闭，停止读取旧 execution。
+    首次检查额外调用一次宿主回调；是否涉及 I/O 取决于实现，宜保持轻量以缩短首条延迟。
+
+    Yields:
+        默认 Event，或无业务事件时的 None 心跳；配置内读取故障正常结束，不合成业务终态。
+
+    Raises:
+        ValueError: 提供 state_check 时，state_poll_interval 不为正。
+        Exception: state_check/clock 的异常及未配置到 live_errors 的读取异常原样传播。
+            state_check 的错误即使属于 live_errors，也不会作为读取故障吞掉。
     """
 
     if state_check is not None and state_poll_interval <= 0:
         raise ValueError("state_poll_interval must be positive")
     now = clock()
     last_business_event_at = now
-    next_state_check = now + state_poll_interval if state_check is not None else None
+    next_state_check = now if state_check is not None else None
     terminal_event = None
 
     def refresh_state(now):

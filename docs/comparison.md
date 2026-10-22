@@ -35,7 +35,7 @@
 
 - **恢复当前 UI**：读取最新快照/结果，再接实时尾部；允许遗漏中间进度。这是 ui-stream 的目标，读与衔接由宿主实现。
 - **补回事件**：需要事件保留和游标恢复协议；Django EventStream 的存储模式更接近这一需求。
-- **续跑计算**：需要执行状态、checkpoint 与重新调度；由 LangGraph 等执行框架处理。ui-stream 的 `finish_retry()` 仅 checkpoint 并关闭，不会重跑任务。
+- **续跑计算**：需要执行状态、checkpoint 与重新调度；由 LangGraph 等执行框架处理。ui-stream 的 `close_for_retry()` 仅 checkpoint 并关闭，不会重跑任务。
 
 这些能力均不等于端到端 exactly-once；ui-stream 不自动去重，SSE ID、进程内锁与宿主 fencing 的作用范围不同。
 

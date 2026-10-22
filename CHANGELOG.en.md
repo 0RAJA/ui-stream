@@ -2,6 +2,14 @@
 
 [简体中文](CHANGELOG.md)
 
+## 0.1.0a4 — Write integrity and integration contracts
+
+- **Breaking:** Rename `finish_retry()` to `close_for_retry()` without an alias. It only attempts a checkpoint before closing; it neither retries automatically nor commits the final result.
+- **Breaking:** `StreamPolicy` accepts only non-negative built-in int values at construction. Reject bools, int subclasses, floats, strings, and negative values while preserving valid zero semantics.
+- **Breaking:** With `state_check`, `iter_live` checks state on its first iteration before any live read. Terminal hints still drain the tail first.
+- Reject same-instance write reentry. Escaping reentry after a possible write records DEGRADED for later commits; same-thread read-only callbacks remain supported.
+- Export Runtime assembly types at the top level, unify English diagnostic logs, and clarify errors, activity refresh, synchronous cancellation, and bilingual usage contracts.
+
 ## 0.1.0a3 — Stream lifecycle and archive helpers
 
 - Add required `EventCodec.reset(reason)` and previous-publisher notification from the new Runtime; transport failure returns False and degrades while rotation transactions stay with the host.

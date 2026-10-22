@@ -51,6 +51,42 @@ class ReaderStateTest(unittest.TestCase):
         )
         return store, iterator
 
+    def test_initial_reset_is_checked_before_any_live_read(self):
+        reset = Event(event=ControlEvent.STREAM_RESET, data={"reason": "execution_replaced"})
+        checks = []
+
+        def check():
+            checks.append(True)
+            return reset
+
+        store, iterator = self.consume([(0, [progress("old", "1-0")])], state_check=check)
+        self.assertEqual(checks, [])
+        self.assertEqual(next(iterator), reset)
+        self.assertEqual(list(iterator), [])
+        self.assertEqual(store.cursors, [])
+        self.assertEqual(checks, [True])
+
+    def test_initial_state_failure_propagates_without_exposing_old_data(self):
+        for error in (PermissionError("revoked"), LiveUnavailable(), OSError("state")):
+            with self.subTest(error=type(error)):
+
+                def check():
+                    raise error
+
+                store, iterator = self.consume([(0, [progress("old", "1-0")])], state_check=check)
+                with self.assertRaises(type(error)):
+                    next(iterator)
+                self.assertEqual(store.cursors, [])
+
+    def test_initial_terminal_drains_dirty_entries_then_valid_tail(self):
+        end = terminal()
+        last = progress("tail", "2-0")
+        store, iterator = self.consume([(0.1, ReadBatch([], "1-0")), (0.1, [last]), (0.1, [])], state_check=lambda: end)
+        self.assertEqual(next(iterator), last)
+        self.assertEqual(list(iterator), [end])
+        self.assertEqual(store.blocks, [0, 0, 0])
+        self.assertEqual(store.cursors, ["0-0", "1-0", "2-0"])
+
     def test_normal_batches_keep_order_and_identical_payloads(self):
         events = [progress("A", "1-0"), progress("A", "2-0"), progress("B", "3-0"), terminal("4-0")]
         store, iterator = self.consume([(0.1, events[:2]), (0.1, events[2:])])
@@ -121,7 +157,8 @@ class ReaderStateTest(unittest.TestCase):
             with self.subTest(pause_after=pause_after):
                 old = [progress("old", "1-0"), progress("old", "2-0")]
                 reset = Event(event=ControlEvent.STREAM_RESET, data={"reason": "execution_replaced"})
-                store, iterator = self.consume([(0.1, old)], state_check=lambda: reset)
+                states = iter((None, reset))
+                store, iterator = self.consume([(0.1, old)], state_check=lambda: next(states))
                 received = [next(iterator) for _ in range(pause_after)]
                 store.now += 1
                 received.extend(iterator)
@@ -138,8 +175,13 @@ class ReaderStateTest(unittest.TestCase):
         ):
             with self.subTest(error=type(error)):
 
+                states = iter((None, error))
+
                 def check():
-                    raise error
+                    state = next(states)
+                    if isinstance(state, Exception):
+                        raise state
+                    return state
 
                 first = progress("allowed", "1-0")
                 store, iterator = self.consume([(0.1, [first]), (1, [progress("forbidden", "2-0")])], check)
@@ -152,7 +194,7 @@ class ReaderStateTest(unittest.TestCase):
         reset = Event(event=ControlEvent.STREAM_RESET, data={"reason": "execution_replaced"})
         for changed_state in (reset, PermissionError("revoked")):
             with self.subTest(changed_state=changed_state):
-                states = iter((terminal(), changed_state))
+                states = iter((None, terminal(), changed_state))
 
                 def check():
                     state = next(states)
@@ -180,7 +222,7 @@ class ReaderStateTest(unittest.TestCase):
         store.now += 1
 
         self.assertEqual(list(iterator), [])
-        self.assertEqual(store.blocks, [1000, 0])
+        self.assertEqual(store.blocks, [0, 0])
 
     def test_live_failure_disconnects_without_synthesizing_a_terminal(self):
         first = progress("A", "1-0")

@@ -1,16 +1,28 @@
-# Migrate from a2 to a3
+# Migration
 
 [简体中文](migration.md) · [Documentation](README.en.md)
 
+## Upgrade from a3 to a4
+
+- Replace `finish_retry()` with `close_for_retry()`. There is no compatibility alias. It still only attempts a checkpoint and closes; it does not commit a final result, reschedule computation, or acknowledge durable persistence.
+- Remove same-instance writes from codec/policy/port callbacks. Move those writes back into the host's task sequence. Before commit, while the instance is open, reentry raises `ReentrantStreamOperation`, not a backend outage to retry blindly. If the error escapes after a writing port is entered, DEGRADED is recorded and preserved by later commits. Rejection before I/O or an inner rejection handled by the host does not cause degradation. Same-thread property reads remain supported. A port holding the lock must not wait for another thread to read lock-protected properties or invoke methods needing that lock. Writes from post-commit terminal callbacks encounter the closed error first and the outer call keeps notification-failure semantics; see [API](api.en.md).
+- Policies accept only non-negative built-in int values, excluding int subclasses such as IntEnum. Normalize external configuration explicitly; bools, floats, strings, and negative values are rejected before event I/O. Zero keeps its field-specific meaning, including per-event checkpoint/activity checks.
+- With `state_check`, the first iteration checks state before reading live data. Later checks keep their configured interval. The first check adds one host callback invocation; keep it lightweight. Initial reset/errors expose no old live event; an initial terminal still drains the tail before emitting a synthetic end. Authorize before constructing the HTTP response.
+- `Binding`, `Checkpoint`, `EncodingTarget`, and the assembly Protocols are also exported by `ui_stream`. Existing `ui_stream.types` imports remain valid.
+
+See [API](api.en.md) for the current failure and zero-value contracts. Run your own adapter/consumer tests when upgrading.
+
+## Upgrade a2 to a3
+
 Upgrading from `0.1.0a2` to `0.1.0a3` requires updating custom codecs and checking integration of previous-stream notifications, archive appends, and SSE lifetime. Pin the version, update adapters, and run contract tests before upgrading.
 
-## Codecs must implement reset
+### Codecs must implement reset
 
 `EventCodec` now requires `business(data)`, `terminal(status)`, `reset(reason)`, and `encode(event, target)`. Add reset to custom codecs; Runtime does not probe older protocols. Default `JsonEventCodec.reset(reason)` creates a cursor-free `STREAM_RESET` with `{"reason": reason}` data. Construction/encoding errors propagate. Reuse `codec.terminal(status)` for existing terminal messages.
 
 [Counter](../examples/counter.py) and [DemoCodec](../demos/sqlite/events.py) show custom protocols. The a2 fixed/dynamic policy rules are unchanged.
 
-## Notify the previous channel after execution rotation
+### Notify the previous channel after execution rotation
 
 The host first commits durable execution rotation and fences the old writer. Then call `announce_replacement(previous_publisher)` on the new Runtime, passing the previous execution's publisher. This example only demonstrates memory ports; the host implements database transactions and fencing.
 
@@ -26,9 +38,9 @@ runtime.finish(status="DONE", completion=4)
 assert store.snapshot.result == 4
 ```
 
-The new Runtime's codec constructs `reset("execution_replaced")` and validates LIVE encoding. Only `live_errors` raised during the previous publisher's publication degrade: return False, mark the new Runtime DEGRADED, and log identities/error type without a body. Other failures propagate; True only means publish returned normally. This call consumes no budgets, archives nothing, closes no execution, and does not retry. Host state checks still cover readers that miss the notification. Both ends must use matching event protocols.
+The new Runtime's codec constructs `reset("execution_replaced")` and validates LIVE encoding. Except for `ReentrantStreamOperation`, which propagates, only `live_errors` raised during the previous publisher's publication degrade: return False, mark the new Runtime DEGRADED, and log identities/error type without a body. Other failures propagate; True only means publish returned normally. This call consumes no budgets, archives nothing, closes no execution, and does not retry. Host state checks still cover readers that miss the notification. Both ends must use matching event protocols.
 
-## Append archives using host identities
+### Append archives using host identities
 
 ```python
 from ui_stream.archive import append_archive_events
@@ -48,7 +60,7 @@ assert not result.truncated
 
 The result contains a new `events` list, `appended_count`, `duplicate_count`, and capacity `dropped_count`. The counts sum to incoming length; `truncated` means capacity loss. Deduplication precedes fitting, so later occurrences of a capacity-rejected first ID still count as duplicates. Oversized existing data is retained; the first rejected candidate prevents accepting later smaller ones. The host owns transactions and `event_size` matching actual persistence, including fields hidden from public serialization.
 
-## Let the HTTP layer hold a synchronous SSEBody
+### Let the HTTP layer hold a synchronous SSEBody
 
 ```python
 from ui_stream.sse import SSEBody, encode_sse_heartbeat

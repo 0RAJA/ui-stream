@@ -21,7 +21,13 @@ class InvalidCursor(ValueError):
 
 
 class ClosedStream(RuntimeError):
-    """已 finish 或 finish_retry 的 Runtime 又收到写入/正常终止调用。"""
+    """已 finish 或 close_for_retry 的 Runtime 又收到写入/正常终止调用。"""
+
+    pass
+
+
+class ReentrantStreamOperation(RuntimeError):
+    """实例仍打开时写操作发生重入；提交前原样传播，可能已写入时同时标记降级。"""
 
     pass
 

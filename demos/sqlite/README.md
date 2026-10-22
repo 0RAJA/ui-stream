@@ -32,6 +32,8 @@ Demo 自定义了 `progress` / `finished` 事件、整数游标及 `DONE` / `ERR
 
 HTTP 边界直接持有 `SSEBody`，注入 Demo 编码器以保留整数游标；断开时只关闭该读者 iterator，不关闭共享通道或生产任务。源与编码的关闭约束见 [API](../../docs/api.md)。
 
+本例没有基于活动时间的 watchdog；`touch_activity` 只校验当前 execution。进程租约防止多宿主同时接管，重启时统一标记遗留任务中断。真实宿主若依赖活动时间判定存活，应在 checkpoint/touch 中保存时间戳，见 [API](../../docs/api.md)。
+
 ## HTTP 接口与实现入口
 
 | HTTP | 用途 |

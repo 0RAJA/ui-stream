@@ -19,7 +19,7 @@ A snapshot may be a latest value, accumulated state, or a bounded event list. It
 
 ## Assemble three ports
 
-A “port” is an implementation object with agreed methods. Your classes can satisfy the [Protocols](../src/ui_stream/types.py) without inheriting Runtime or the default event class.
+A “port” is an implementation object with agreed methods. Your classes can satisfy the [Protocols](../src/ui_stream/types.py) without inheriting Runtime or the default event class; explicitly inheriting a Protocol is also available for IDE visibility. Assembly types can be imported from `ui_stream`, while their contracts remain defined in `ui_stream.types`.
 
 ![Three ports and host boundaries](diagrams/architecture.en.png)
 
@@ -37,7 +37,11 @@ The host creates an execution, combines resource/task/execution IDs into a `Bind
 2. A pending count, byte, or activity-time threshold triggers a synchronous `checkpoint`. Only success clears the batch. Configured storage failures retain the buffer and record degradation; subsequent events can trigger recovery. Time checks are event-driven, with no background thread during idle periods.
 3. After computing the result, the task calls `finish(status=..., completion=...)`; the sequence below commits before notification.
 
-One Runtime lock covers these calls and port I/O, so business threads may wait for publication or database operations. It cannot establish order or execution isolation across instances or processes. Do not mutate events or nested data after passing them to Runtime; codecs and publishers follow the same convention.
+One Runtime lock covers these calls and port I/O, so business threads may wait for publication or database operations. Same-thread callbacks may read properties. Before commit, while the instance remains open, nested writes raise `ReentrantStreamOperation` to prevent reordered publication or a lost archive tail. A port must not block waiting for another thread to call a method or property requiring the same lock; reading `pending_count`, `closed`, or `archive_status` can also create that deadlock. The lock cannot establish order or execution isolation across instances or processes. Do not mutate events or nested data after passing them to Runtime; codecs and publishers follow the same convention.
+
+If a reentry error escapes an outer operation after entering a potentially writing port, Runtime records DEGRADED and still propagates it; a later successful finish preserves that status. Reentry before I/O in the policy/initial encoding does not degrade, nor does a host-handled inner rejection followed by a successful outer operation.
+
+DEGRADED records an observed failure or uncertainty about completeness, not confirmed data loss; this includes reentry inside the final commit. Runtime cannot determine whether a callback ran before or after the transaction committed. Ordinary commit errors still propagate and retain the open state without additional degradation.
 
 ![Commit before closure and terminal publication; notify last](diagrams/completion.en.png)
 
@@ -45,7 +49,7 @@ One Runtime lock covers these calls and port I/O, so business threads may wait f
 | --- | --- |
 | `commit` succeeds | Storage has committed tail, terminal event, and result in one transaction. Runtime then closes and attempts live completion, so notified readers can already read the result. |
 | `commit` raises | Propagate, retain pending and open state, and send no live terminal or observer notification. The host checks the commit outcome before deciding to retry. |
-| Terminal publication fails after commit | Catch `Exception` and degrade in-memory integrity; do not undo or repeat the commit, or write that late degradation back to storage. |
+| Terminal publication fails after commit | The instance is already closed, so send from the terminal publisher callback raises the closed error first. The outer finish catches notification `Exception`, returns normally, and degrades memory integrity without undoing/repeating the commit or writing that degradation back to storage. |
 | `after_close` observer fails | Catch `Exception` and log it so a completed commit is not reported as needing retry. The observer receives a body-free `Summary` outside the lock. |
 
 Publication and database commit are separate operations, not an automatic cross-system transaction. Timeouts may leave writes uncertain, so hosts also design retry idempotency. An execution ID or process lock alone does not provide exactly-once delivery. See the [API](api.en.md) for capacity and per-stage failure rules.

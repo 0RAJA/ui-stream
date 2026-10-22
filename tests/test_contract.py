@@ -131,7 +131,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
         self.run_contract(
             """
             runtime.send({"progress": 50})
-            runtime.finish_retry()
+            runtime.close_for_retry()
             assert len(archive.events) == 1 and archive.result is None
             assert len(live.events) == 1 and runtime.closed
             try:
@@ -366,7 +366,7 @@ class StandaloneStreamContractTest(unittest.TestCase):
             runtime, live, store = make_counter(after_close=observer)
             runtime.send(4)
             runtime.finish(status="DONE", completion=4)
-            runtime.finish_retry()
+            runtime.close_for_retry()
             assert runtime.closed and store.snapshot.result == 4
             assert len(summaries) == 1 and summaries[0].event_count == 1
             assert not hasattr(summaries[0], "runtime")
@@ -403,4 +403,45 @@ class StandaloneStreamContractTest(unittest.TestCase):
             assert store.snapshot.result == 13 and publisher.results_at_terminal == [13]
             """,
             bootstrap="",
+        )
+
+    def test_public_assembly_types_support_a_standard_library_only_host(self):
+        self.run_contract(
+            """
+            from uuid import uuid4
+            from ui_stream import (
+                ArchiveStore, Binding, Checkpoint, EncodingTarget, EventCodec,
+                ExecutionBinding, Integrity, LivePublisher, StreamPolicy, StreamRuntime,
+            )
+            from examples.counter import CounterCodec, MemoryPublisher, MemorySnapshotStore
+            binding: ExecutionBinding = Binding("synthetic", "task", uuid4())
+            codec: EventCodec = CounterCodec()
+            archive: ArchiveStore = MemorySnapshotStore(binding)
+            publisher: LivePublisher = MemoryPublisher(codec, archive)
+            runtime = StreamRuntime(binding=binding, codec=codec, archive_store=archive,
+                                    publisher=publisher, policy=StreamPolicy(checkpoint_event_count=1))
+            runtime.send(4)
+            assert archive.snapshot.latest == 4
+            assert codec.encode(codec.business(4), EncodingTarget.LIVE) == b"tick:4"
+            assert Checkpoint(Integrity.COMPLETE).capacity_exhausted is False
+            runtime.close_for_retry()
+            assert runtime.closed
+            assert not any(name.split(".")[0] in ("redis", "pydantic", "django") for name in sys.modules)
+            """,
+            bootstrap="",
+        )
+
+    def test_close_for_retry_closes_after_archive_failure_without_claiming_persistence(self):
+        self.run_contract(
+            """
+            runtime.send({"progress": 50})
+            archive.fail_checkpoint = True
+            runtime.close_for_retry()
+            assert runtime.closed and runtime.pending_count == 1
+            assert runtime.archive_status == Integrity.DEGRADED
+            assert archive.events == [] and archive.result is None
+            archive.fail_checkpoint = False
+            runtime.close_for_retry()
+            assert archive.events == [] and len(live.events) == 1
+            """
         )

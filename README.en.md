@@ -15,7 +15,7 @@ ui-stream fits Python applications that already own background tasks and busines
 Use Python ≥3.11 and an activated virtual environment. Install the core package; its import name is `ui_stream`:
 
 ```sh
-python -m pip install ui-stream==0.1.0a3
+python -m pip install --pre ui-stream
 ```
 
 ## Minimal example

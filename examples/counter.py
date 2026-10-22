@@ -10,9 +10,9 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable
 from uuid import uuid4
 
-from ui_stream import StreamPolicy, StreamRuntime
+from ui_stream import Binding, Checkpoint, EncodingTarget, Integrity, StreamPolicy, StreamRuntime
 from ui_stream.exceptions import InvalidEvent, StaleExecution
-from ui_stream.types import AfterClose, Binding, Checkpoint, EncodingTarget, Integrity
+from ui_stream.types import AfterClose
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +88,8 @@ class MemorySnapshotStore:
             return Checkpoint(archive_status=archive_status)
 
     def touch_activity(self, *, binding):
+        """本例没有 watchdog，只校验执行身份；生产 watchdog 宿主还需保存活动时间。"""
+
         with self._lock:
             self._require_current(binding)
 

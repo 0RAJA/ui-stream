@@ -100,7 +100,14 @@ class SSEBody(Iterator[bytes], Generic[EventT]):
             raise
 
     def close(self) -> None:
-        """先关闭自身再透传给源；直接清理失败会传播，但不会重复调用源 close。"""
+        """关闭自身并最多向源透传一次 close，直接清理失败会传播。
+
+        不取消生产任务，也不保证打断正在阻塞的 next；调用方须串行使用 body。
+        未启动生成器的 finally 遵循 Python 生命周期，不能代替已获取资源的显式 owner。
+
+        Raises:
+            Exception: 源 close 的异常原样传播；自身仍保持关闭，不会再次调用源 close。
+        """
 
         if self._closed:
             return

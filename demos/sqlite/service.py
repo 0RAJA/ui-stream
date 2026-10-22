@@ -89,7 +89,7 @@ class DemoService:
             completion = {"processed": TOTAL_STEPS, "summary": "12 synthetic items completed"}
             for step in range(1, TOTAL_STEPS + 1):
                 if self._stop.wait(self._interval):
-                    runtime.finish_retry()
+                    runtime.close_for_retry()
                     self.repository.interrupt(binding=binding, warning="The demo stopped; this job will not resume")
                     return
                 runtime.send(DemoEvent(kind=EventKind.PROGRESS, step=step, message=f"Synthetic item {step}"))
@@ -105,7 +105,7 @@ class DemoService:
                     if scenario != Scenario.COMMIT_FAILURE or attempt:
                         raise
                     if self._stop.wait(self._retry_delay):
-                        runtime.finish_retry()
+                        runtime.close_for_retry()
                         self.repository.interrupt(binding=binding, warning="The demo stopped before the commit retry")
                         return
         except StaleExecution:

@@ -18,7 +18,26 @@
 | `live_errors` / `archive_errors` | 允许降级继续的异常类型。默认分别为 `(LiveUnavailable, OSError)` 与 `(ArchiveUnavailable,)`；最终 commit 不吞异常。 |
 | `after_close` / `closed_error` | 可选关闭观察者；关闭后调用 `send`/`finish` 默认抛 `ClosedStream`，自定义异常须支持无参构造。 |
 
+组装常用类型可直接从包入口导入；`ui_stream.types` 仍保留原定义和导入路径：
+
+```python
+from ui_stream import (
+    ArchiveStore, Binding, Checkpoint, EncodingTarget, EventCodec,
+    ExecutionBinding, Integrity, LivePublisher, StreamPolicy, StreamRuntime,
+)
+```
+
 初始化只保存端口和配置，不创建持久 execution、不访问后端。宿主负责连接的创建/关闭；Runtime 没有统一关闭客户端的方法。
+
+同一实例的写操作不能重入：codec、策略工厂及端口回调不得再次驱动本实例写入。实例仍打开的提交前链路中，写重入抛 `ReentrantStreamOperation`，即使后端异常配置包含 `Exception` 也不会被降级吞掉。
+
+重入异常逃出外层调用时，若已经进入可能写入的端口，Runtime 同时记录 DEGRADED 并继续抛错；后续成功的 finish 也保留该状态。I/O 前的策略/初次编码重入不降级；宿主自行捕获内层拒绝且外层成功时也不降级。
+
+这里 DEGRADED 表示已观察到故障或完整性不确定，不等于确认丢失；也包括最终 commit 内部的重入。Runtime 无法判断回调发生在事务提交前还是提交后。普通 commit 异常仍按原规则传播并保留打开状态，不额外降级。
+
+同线程回调可通过 RLock 读取属性。持锁的端口不得阻塞等待另一线程调用需同一锁的方法或属性；`pending_count`、`closed`、`archive_status` 的读取也需要该锁，等待这些读取同样可能死锁。
+
+最终 commit 成功后，Runtime 先关闭再发送终态。此时终态 publisher 回调 `send` 会先抛关闭异常（默认 `ClosedStream`），外层 `finish` 按提交后通知失败规则正常返回并记 DEGRADED；不会传播为提交前的重入错误或撤销结果。
 
 ## 2. 发送进度并结束
 
@@ -26,17 +45,28 @@
 | --- | --- | --- |
 | `send(data)` | `data` 由 codec 解释；返回待归档事件，可能带发布回执；单条超大时返回 `None`。 | 任务产生进度时反复调用；可能同步触发 checkpoint。 |
 | `finish(status=..., completion=..., error_code="")` | `status` 交给 codec 构造终态；`completion` 交给 store 保存最终结果；`error_code` 仅进入关闭摘要。返回 `None`。 | 任务计算结束后调用，先 commit 再关闭、通知。 |
-| `finish_retry()` | 尝试 checkpoint 后关闭，不保存最终结果或构造终态；已关闭时重复调用直接返回。 | 宿主准备重试或退出本次运行时；它本身不重新调度任务。 |
+| `close_for_retry()` | 尝试 checkpoint 后关闭，不保存最终结果或构造终态；已关闭时重复调用直接返回。 | 宿主准备重试或退出本次运行时；它本身不重新调度任务。 |
 
 默认 `JsonEventCodec.terminal` 只接受 `SUCCESS` / `FAILED`；Counter 使用 `DONE` / `FAILED`，Demo 使用自己的 `DONE` / `ERROR` / `INTERRUPTED`。这些属于 codec 的业务协议，与 `Integrity` 无关。
 
-`send` 返回事件并不证明已发布或已归档：实时后端降级时仍可返回原事件，归档也可能还在 pending 中。`finish` 的终态编码或 commit 失败会保留 pending 和打开状态；宿主应判断失败原因与提交是否已发生，再选择重试。`finish_retry` 遇到配置内归档故障仍会关闭，因此不能把它当成持久保存成功的确认。
+`send` 返回事件并不证明已发布或已归档：实时后端降级时仍可返回原事件，归档也可能还在 pending 中。`finish` 的终态编码或 commit 失败会保留 pending 和打开状态；宿主应判断失败原因与提交是否已发生，再选择重试。`close_for_retry` 遇到配置内归档故障仍会关闭，因此不能把它当成持久保存成功的确认。
+
+### 三种收场调用
+
+| 调用 | 归档/结果与实例状态 |
+| --- | --- |
+| `finish` 编码或 commit 失败 | 异常传播，pending 和打开状态保留；没有实时终态或关闭通知。 |
+| 同实例再次 `finish` | 再次构造终态并尝试 commit；成功后关闭，之后再调用抛关闭异常。它不重跑计算。 |
+| `close_for_retry` | 只尝试 checkpoint，不 commit 最终结果；配置内归档故障仍关闭，未保存的 pending 可能保留。已关闭后再调用是 no-op，不会重试保存。 |
+
+最终提交超时后，宿主应先确认持久结果。再次调用会重新构造终态，存储端应按 execution/事务语义保证幂等，而不是假设终态对象完全相同。`close_for_retry` 的未配置异常（默认含 `StaleExecution`）传播且不关闭；宿主决定如何处理失效执行。
 
 ### 各阶段异常
 
 | 阶段 | Runtime / reader 行为 |
 | --- | --- |
 | 构造/编码非法事件、非法游标 | `InvalidEvent` / `InvalidCursor` 等向调用方传播，应修正输入。 |
+| 提交前、实例仍打开时写操作重入 | `ReentrantStreamOperation` 传播，不视为可恢复后端故障；提交后的通知按下方独立规则处理。 |
 | 业务实时发布遇到 `live_errors` | 记 `DEGRADED`，继续归档；之后的事件还可尝试发布。 |
 | 中间 checkpoint / 活动更新遇到 `archive_errors` | 记 `DEGRADED`；checkpoint 失败保留 pending，后续事件可触发恢复。 |
 | 默认配置下的 `StaleExecution`、其他未配置端口异常 | 向宿主传播，不能把旧执行当作暂时网络故障继续写。 |
@@ -47,15 +77,13 @@
 
 `announce_replacement(previous_publisher) -> bool` 在新 Runtime 上构造并校验 `codec.reset("execution_replaced")`，向旧执行的 publisher 发布。宿主必须先提交 execution 轮换和写入隔离，两端使用匹配的 codec 协议。已关闭的 Runtime 先抛关闭异常。
 
-只有 publish 阶段配置内的 `live_errors` 被捕获：记录新执行身份和异常类型、标记新 Runtime DEGRADED、返回 False。构造/编码错误及其他异常直接传播；True 表示 publish 正常返回，不证明读者收到。此方法不调用策略工厂，不影响事件预算/pending/归档，不关闭或重试。失败后的重试决策、读者状态复核与数据库事务由宿主负责。
+除直接传播的 `ReentrantStreamOperation` 外，只有 publish 阶段配置内的 `live_errors` 被捕获：记录新执行身份和异常类型、标记新 Runtime DEGRADED、返回 False。构造/编码错误及其他异常直接传播；True 表示 publish 正常返回，不证明读者收到。此方法不调用策略工厂，不影响事件预算/pending/归档，不关闭或重试。失败后的重试决策、读者状态复核与数据库事务由宿主负责。
 
 ## 3. 配置容量和归档批量
 
 ### 固定策略与按次读取配置
 
 `policy=StreamPolicy(...)` 保持原有固定策略行为；也可以传入 `policy=current_policy`，其中工厂无参并返回一份 `StreamPolicy`。默认仍是固定对象，构造 Runtime 时不调用工厂。
-
-工厂支持从 `0.1.0a2` 开始提供；`0.1.0a1` 仅支持固定策略。需要动态配置的宿主应固定 `0.1.0a2` 或更新版本，并验证适配器契约。
 
 每次 `send` 在实例锁内先确认未关闭，再调用工厂一次；当前事件的大小、实时预算、归档缓冲、checkpoint 和活动刷新都使用这份策略。配置变化从下一次 `send` 生效，已有 pending 会按新阈值检查。例如：
 
@@ -79,9 +107,9 @@ assert store.snapshot.latest == 9
 runtime.finish(status="DONE", completion=13)
 ```
 
-实际宿主可在工厂内读取自己的配置并构造策略，例如 Django settings；库不导入 Django。工厂只计算或读取配置，应轻量、无后端 I/O，也不要调用同一 Runtime 的 `send` / `finish` / `finish_retry`。工厂自身异常直接传播，返回非 `StreamPolicy` 抛 `TypeError`，均发生在业务事件处理、计数和外部写入之前；不会作为实时/归档故障降级。
+实际宿主可在工厂内读取自己的配置并构造策略，例如 Django settings；库不导入 Django。工厂只计算或读取配置，应轻量、无后端 I/O，也不要调用同一 Runtime 的 `send` / `finish` / `close_for_retry`。工厂自身异常直接传播，返回非 `StreamPolicy` 抛 `TypeError`，均发生在业务事件处理、计数和外部写入之前；不会作为实时/归档故障降级。
 
-`finish` / `finish_retry` 不使用策略阈值，不额外调用工厂；关闭后 `send` 先抛 `ClosedStream`，也不调用工厂。`runtime.policy` 仍是只读属性：固定值原样返回，工厂模式每次外部读取都会重新求值。不要依赖多次属性读取取得同一份动态配置。
+`finish` / `close_for_retry` 不使用策略阈值，不额外调用工厂；关闭后 `send` 先抛 `ClosedStream`，也不调用工厂。`runtime.policy` 仍是只读属性：固定值原样返回，工厂模式每次外部读取都会重新求值。不要依赖多次属性读取取得同一份动态配置。
 
 更新策略不清零累计事件/字节，也不重新启动已经停止的实时发布或归档缓冲；已记录的完整性不会恢复。它改变的是后续判断使用的阈值，不会重建执行状态或自动启动定时器。
 
@@ -98,9 +126,28 @@ runtime.finish(status="DONE", completion=13)
 | `checkpoint_event_count` / `checkpoint_bytes` | 20 / 256 KiB | pending 条数或 ARCHIVE 字节达到阈值，同步尝试 checkpoint。 |
 | `activity_interval_seconds` | 60 秒 | 新事件到达时检查间隔：正常归档触发 checkpoint，停止归档后调用 `touch_activity`；不是后台定时心跳。 |
 
+实时字节预算只统计成功返回的发布。不确定写入或 publisher 内部重试可能在没有成功回执时已发送字节，所以它不是实际网络总流量的硬上限。
+
 `max_events` 是一次执行的累计预算，不会在 checkpoint 后清零。例如预算为 2、每条都归档，发送 1–4 后快照可停在 2，而实时进度与最终业务结果继续到 4。即使 store 只保存常量空间的最新值，也受这个策略限制。长任务应明确选择预算或执行轮换方案；没有内置“无限最新值”开关。
 
-`StreamPolicy` 本身不验证配置。持久快照的**完整大小**由 store 另外限额；不能把 Runtime 的 pending 限制当作数据库归档上限。
+`StreamPolicy` 构造时要求每个字段为非负内置 `int`；其他类型（含 bool、IntEnum 等 int 子类、浮点数和字符串）抛 `TypeError`，负数抛 `ValueError`。零值不是统一的“禁用”开关：
+
+| 零值字段 | 含义 |
+| --- | --- |
+| `max_event_bytes` | 拒绝正长度 LIVE 编码的单事件。 |
+| `max_events` | 从首条事件开始停止归档缓冲，实时仍可继续。 |
+| `max_live_bytes` | 停止正长度业务事件的实时发布，归档仍可继续。 |
+| `max_archive_bytes` | 正长度 ARCHIVE 编码不能进入 pending。 |
+| `checkpoint_event_count` / `checkpoint_bytes` | 每次入缓冲后尝试 checkpoint。 |
+| `activity_interval_seconds` | 每次事件到达时检查活动，不是关闭活动刷新。 |
+
+自定义 codec 可以返回空字节，所以零字节预算仍允许零长度编码。终态不受业务预算限制。持久快照的**完整大小**由 store 另外限额，pending 限制不等于数据库归档上限。
+
+### 活动时间与 watchdog
+
+成功 checkpoint 会刷新 Runtime 的本地活动基准；归档停止后，只有新的业务事件到达且间隔到期才调用 `touch_activity(binding=...)`。没有 send 时不会后台续期；SSE 心跳也不代表生产任务仍在计算。
+
+若宿主 watchdog 依赖活动时间，checkpoint 和 touch_activity 都应在校验当前 execution 后更新持久 `last_active_at`，使用宿主一致的时钟。Runtime 的 monotonic 值只控制本实例调用频率。长时间无进度的计算需要宿主执行器自己的存活机制。[Counter](../examples/counter.py) 和 [SQLite Demo](../demos/sqlite/storage.py) 没有 watchdog，因此 touch 只做 fencing，没有无用时间戳字段。
 
 ## 4. 理解完整性、回执和关闭摘要
 
@@ -109,7 +156,7 @@ runtime.finish(status="DONE", completion=13)
 | `Integrity` | 含义 |
 | --- | --- |
 | `COMPLETE` | 尚未发现实时/归档故障或已知丢弃；不是永久保存完整历史的承诺。 |
-| `DEGRADED` | 曾遇到可恢复后端故障，或实时预算使发布停止；任务仍可能成功。 |
+| `DEGRADED` | 曾遇到后端故障、写入不确定或实时预算使发布停止；不证明已有数据丢失，任务仍可能成功。 |
 | `TRUNCATED` | 已知有进度事件因单条大小、累计条数、缓冲或存储容量被丢弃。 |
 
 用 `merge_archive_status(current, incoming)` 保留更严重的状态；后续成功不清除曾发生的问题。存储端 checkpoint 返回 `Checkpoint(archive_status, capacity_exhausted)`：整批已处理才能返回；若容量恰好用尽但没丢事件，可以仍为 COMPLETE，下一条被丢弃时才升 TRUNCATED。
@@ -143,7 +190,7 @@ def sse_frames(store, key, last_event_id, state_check=None):
 
 `normalize_cursor` 把空/假值转为 `0-0`，否则要求两段 ASCII 十进制 uint64，合法前导零原样保留；不验证事件存在性或权限。`iter_live` 只产出 Event 或 None，None 由宿主转成 SSE 注释心跳；心跳不推进游标或刷新业务空闲时间。示例沿用 `block_ms=15000`（单次最多等待 15 秒）和 `idle_timeout=300`（业务空闲期限 5 分钟）；默认无状态提示时，持续无业务事件达到期限也会结束迭代。长任务可按需调整这两个参数，见 [reader.py](../src/ui_stream/reader.py)。
 
-长连接可用 `state_check` 复核权限和执行是否仍有效：无参、默认每 15 秒首次及后续检查，返回控制 Event 或 None，权限异常直接传播。宿主返回结束提示时先非阻塞排空已发布尾流；读到真实结束事件则保留其游标，否则原始空读后才发合成结束。只有坏 payload 的批次不算尾流为空。reset 提示立即关闭旧流。
+长连接可用 `state_check` 复核权限和执行是否仍有效：无参，首次迭代先检查，后续默认每 15 秒检查，返回控制 Event 或 None，权限异常直接传播。初始 reset/检查异常发生在任何实时读取之前；这不替代创建 HTTP 响应前的鉴权。宿主返回结束提示时先非阻塞排空已发布尾流；读到真实结束事件则保留其游标，否则原始空读后才发合成结束。只有坏 payload 的批次不算尾流为空。reset 提示立即关闭旧流。 首次检查额外调用一次宿主回调，是否执行 I/O 由宿主实现决定；宜保持轻量，限制首条事件的等待时间。
 
 `RedisLiveStore` 每次追加在 Lua 内执行 XADD 与滑动 TTL 刷新，返回附有真实 ID 的新事件；没有自动重发/去重。读取时建议 `decode_responses=False`：坏 payload 可逐条跳过，批次扫描游标仍前进。若客户端预解码在返回任何 ID 前就失败，则变成 LiveUnavailable。读取遇到配置的实时异常时迭代结束，**不会合成完成事件**；快照重取和重连由宿主决定。`block_ms<=0` 在默认适配器中表示不阻塞，不是 Redis `BLOCK 0` 的无限等待。
 
@@ -152,6 +199,8 @@ def sse_frames(store, key, last_event_id, state_check=None):
 `SSEBody(events, *, encoder=...)` 是惰性同步 `Iterator[bytes]`，要求传入已取得的 Iterator。默认编码 Event/None；自定义编码器处理每个元素并返回 bytes，可映射宿主异常。body.close 在首次 next 前、正常耗尽、读取或编码错误时向源 close 透传且最多一次。直接 close 失败传播；已有读取/编码错误期间的普通清理失败只记录类型，不替换原错误。编码器或自然耗尽清理的 StopIteration 转为带 cause 的 RuntimeError，避免消费者误当 EOF；显式 close 保留原异常。
 
 HTTP 层应在退出时关闭 body。它只拥有传入的 iterator，不关闭外层 Iterable、共享客户端或生产任务。未启动生成器的 finally 不保证执行，阻塞 next 不能被 close 中断；不支持并发调用和 async iterator。可运行自定义编码示例见[迁移说明](migration.md)。
+
+阻塞取消应在源或 HTTP 边界实现：给后端读取设置有限超时，让请求取消能在后续读取边界被观察，并把 `body.close` 注册到响应退出/关闭钩子。不要并发 close 正在 next 的生成器；预先获取的资源应由有显式 close 的迭代器或外层上下文管理器拥有，而不是依赖未启动生成器的 finally。同步读取放入 ASGI 线程池也不意味着能强行停止正在执行的线程。
 
 ### 宿主保存有界 JSON 事件列表
 

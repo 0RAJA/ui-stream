@@ -7,7 +7,7 @@ Runtime 经 codec 构造/计量事件，再交给 publisher 与 ArchiveStore。
 这些 Protocol 描述调用约定，不会自动实现事务、深拷贝或跨实例并发控制。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import StrEnum
 from typing import Any, Callable, Generic, Protocol, TypeVar
 from uuid import UUID
@@ -19,13 +19,14 @@ _ArchiveEventT = TypeVar("_ArchiveEventT", contravariant=True)
 class Integrity(StrEnum):
     """描述一次执行的 UI 进度历史是否可能缺失，与业务成功/失败状态分开。
 
-    实时通道或中间归档故障记为 DEGRADED；已知丢弃事件记为 TRUNCATED。
+    实时/中间归档故障或写端口重入使完整性不确定时记 DEGRADED；已知丢弃事件记 TRUNCATED。
+    DEGRADED 记录故障或不确定性，不证明已有数据丢失。
     后续恢复正常也保留已知缺口，因此合并只沿 COMPLETE → DEGRADED → TRUNCATED 升级。
     COMPLETE 表示尚未发现这些问题，不表示 Redis 永久保留历史或事件恰好投递一次。
     """
 
     COMPLETE = "COMPLETE"  # 尚未发现历史缺口或后端降级。
-    DEGRADED = "DEGRADED"  # 实时/中间归档出现故障或预算停止，未必已有事件被丢弃。
+    DEGRADED = "DEGRADED"  # 故障、写入不确定或实时预算停止，未必已有事件被丢弃。
     TRUNCATED = "TRUNCATED"  # 已知有事件因大小、条数、缓冲或持久容量被丢弃。
 
 
@@ -111,7 +112,12 @@ class StreamPolicy:
     send 按这些阈值决定拒绝单条事件、停止实时业务发布、停止归档缓冲或执行 checkpoint。
     LIVE/ARCHIVE 字节分别由 codec 计量；max_archive_bytes 只限制本实例 pending 的字节和，
     完整持久归档还需存储端自行限额。时间阈值由事件到达触发，不会启动后台定时器。
-    终态另走 commit 和实时通知；这个值对象不校验配置参数。
+    终态另走 commit 和实时通知。字段只接受非负内置 int；bool 和 int 子类也不接受。
+    零字节预算允许空编码；零条数预算停止归档；零批量/时间阈值表示每条检查，不是禁用。
+
+    Raises:
+        TypeError: 任一字段不是内置 int，包括 bool、IntEnum 等子类、浮点数或字符串。
+        ValueError: 任一字段为负数。
     """
 
     max_event_bytes: int = 256 * 1024  # 单个业务事件的 LIVE 编码上限，超限拒绝该事件。
@@ -121,6 +127,16 @@ class StreamPolicy:
     activity_interval_seconds: int = 60  # 事件到达时检查的活动刷新间隔。
     checkpoint_event_count: int = 20  # pending 条数达到阈值即尝试 checkpoint。
     checkpoint_bytes: int = 256 * 1024  # pending 的 ARCHIVE 编码字节阈值。
+
+    def __post_init__(self) -> None:
+        """在配置进入发送链路前拒绝错误类型或负值，零值仍按各字段语义处理。"""
+
+        for field in fields(StreamPolicy):
+            value = getattr(self, field.name)
+            if type(value) is not int:
+                raise TypeError(f"{field.name} must be a built-in int")
+            if value < 0:
+                raise ValueError(f"{field.name} must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +148,7 @@ class Summary:
     event_count/event_bytes 在单条大小校验后、发布前计入，不等于成功发布或归档的数量。
     """
 
-    status: str  # finish 的领域状态，或 finish_retry 使用的 RETRY。
+    status: str  # finish 的领域状态，或 close_for_retry 使用的 RETRY。
     error_code: str  # 宿主提供的通知标签，不自动注入终态或 completion。
     archive_status: Integrity  # 关闭时的内存完整性，包含终态实时通知的降级。
     degraded: bool  # 是否曾观察到 DEGRADED，可与 truncated 同时为真。
@@ -153,17 +169,29 @@ class EventCodec(Protocol[EventT]):
     """
 
     def business(self, data: Any) -> EventT:
-        """将宿主值构造成业务事件；后续编码仍须验证其可接受性。"""
+        """将宿主值构造成业务事件；后续编码仍须验证其可接受性。
+
+        Raises:
+            Exception: 实现定义的输入/构造错误原样交给宿主，不作为端口故障吞掉。
+        """
 
         ...
 
     def terminal(self, status: str) -> EventT:
-        """按宿主领域状态构造终态；支持哪些状态由 codec 决定。"""
+        """按宿主领域状态构造终态；支持哪些状态由 codec 决定。
+
+        Raises:
+            Exception: 实现定义的状态/构造错误原样传播，Runtime 尚不提交或关闭。
+        """
 
         ...
 
     def reset(self, reason: str) -> EventT:
-        """按宿主原因构造当前 profile 的切换事件；不生成消息身份或进行 I/O。"""
+        """按宿主原因构造当前 profile 的切换事件；不生成消息身份或进行 I/O。
+
+        Raises:
+            Exception: 实现定义的原因/构造错误原样传播，不作为传输故障降级。
+        """
 
         ...
 
@@ -172,6 +200,9 @@ class EventCodec(Protocol[EventT]):
 
         event 是 business/terminal/reset 或 publisher 返回的事件；target 指定 LIVE 或 ARCHIVE。
         编码应与对应端口的实际表示一致，包含该目标需要的回执等字段，不发送或存储事件。
+
+        Raises:
+            Exception: 实现定义的校验/编码错误原样传播；ARCHIVE 编码前可能已完成实时发布。
         """
 
         ...
@@ -185,7 +216,12 @@ class LivePublisher(Protocol[EventT]):
     """
 
     def publish(self, event: EventT) -> EventT:
-        """发布一次并返回后续用于归档的事件；可恢复异常由 Runtime 的 live_errors 配置。"""
+        """发布一次并返回后续用于归档的事件；成功返回不代表读者已收到。
+
+        Raises:
+            Exception: 实现定义的传输错误。宿主把可恢复类型配置到 live_errors；
+                其他异常传播，超时后写入结果可能不确定。写重入异常仍传播。
+        """
 
         ...
 
@@ -211,6 +247,11 @@ class ArchiveStore(Protocol[_ArchiveEventT]):
         Returns:
             Checkpoint 回执。Runtime 随后会清空整批 pending，因此不能静默漏存一部分；
             因容量丢弃的事件应反映为 TRUNCATED。操作失败应抛异常，使缓冲保留。
+            使用活动时间 watchdog 的宿主还应在这个事务里刷新活动时间。
+
+        Raises:
+            Exception: 实现定义的存储错误。配置内 archive_errors 降级并保留 pending；
+                其他错误传播。宿主应将 fencing 拒绝与可恢复存储故障区分，且保证重试幂等。
         """
 
         ...
@@ -220,6 +261,12 @@ class ArchiveStore(Protocol[_ArchiveEventT]):
 
         Runtime 停止归档后，在新事件到达且时间阈值到期时调用；不是独立后台心跳。
         存储端仍应校验 binding，防止旧执行刷新新执行的活动时间。
+        宿主使用活动时间 watchdog 时，此方法及成功 checkpoint 应更新持久活动时间；
+        没有 watchdog 的实现可只做身份校验。Runtime 的 monotonic 时间不应作为持久时间戳。
+
+        Raises:
+            Exception: 实现定义的存储/身份错误；Runtime 仅将配置内 archive_errors 降级，
+                fencing 拒绝不应被映射为临时故障。
         """
 
         ...
@@ -245,6 +292,10 @@ class ArchiveStore(Protocol[_ArchiveEventT]):
         Returns:
             本次持久化后的 Integrity。只有事务真正提交后才能返回；失败应抛异常，
             Runtime 才会保留 pending 和未关闭状态，而不发布结束通知。
+
+        Raises:
+            Exception: 实现定义的提交/身份错误一律传播，包括配置内 archive_errors；
+                超时不证明事务回滚，存储端负责幂等，宿主确认结果后再决定是否重试。
         """
 
         ...
