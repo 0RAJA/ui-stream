@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ui-stream"
-version = "0.1.0a4"
+version = "0.1.0"
 description = "Bounded UI event streaming with host-owned durable results"
 readme = {file = "README.pypi.md", content-type = "text/markdown"}
 requires-python = ">=3.11"
@@ -15,7 +15,7 @@ maintainers = [{name = "raja", email = "rajawwang@foxmail.com"}]
 dependencies = []
 keywords = ["sse", "streaming", "snapshot", "ui"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Operating System :: MacOS",
