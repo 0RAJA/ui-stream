@@ -2,6 +2,13 @@
 
 [简体中文](CHANGELOG.md)
 
+## 0.1.0
+
+- First non-prerelease: a synchronous Runtime sends background-task progress to a UI through replaceable codec, live-publishing, and archive ports, then announces completion after committing the final result.
+- Provides bounded buffering, batch snapshots, fixed or dynamic policies, archive appends deduplicated by host identities, and synchronous SSE encoding with iterator cleanup.
+- The core has no third-party dependencies; JSON/Redis adapters are optional installations. The host owns permissions, execution isolation, transactions, and reconnect recovery.
+- `0.1.x` patch releases preserve compatibility for documented public APIs, port protocols, and configuration semantics. Incompatible changes use a new `0.x` minor version and include migration guidance.
+
 ## 0.1.0a4 — Write integrity and integration contracts
 
 - **Breaking:** Rename `finish_retry()` to `close_for_retry()` without an alias. It only attempts a checkpoint before closing; it neither retries automatically nor commits the final result.
@@ -30,4 +37,4 @@
 - Source, wheel/sdist, README, and sensitive-content CI; Release verification and a separate publishing template.
 - Bilingual illustrated docs and reproducible bounded performance benchmarks.
 
-Alpha APIs may change; pin versions and validate adapter contracts before upgrades. GitHub Releases / PyPI provide the actual publication status.
+See the [migration guide](docs/migration.en.md) for upgrades from historical alpha versions.
